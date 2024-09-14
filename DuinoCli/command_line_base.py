@@ -1,0 +1,579 @@
+#!/usr/bin/env python3
+"""
+This module implements a command line interface
+"""
+
+import argparse
+from cmd import Cmd
+from fnmatch import fnmatch
+import logging
+import os
+import shlex
+import stat
+import sys
+from typing import cast, Any, Dict, IO, List, Tuple, Union
+
+from log_setup import log_setup
+
+MAX_HISTORY_LINES: int = 40
+
+# argparse added exit_on_error support in 3.9
+if sys.version_info >= (3, 9, 0):
+    EXIT_ON_ERROR_FALSE = {'exit_on_error': False}
+else:
+    EXIT_ON_ERROR_FALSE = {}
+
+try:
+    import readline
+except ImportError:
+
+    class ReadLine:
+        """Fake readine implementation to keep the linter happy"""
+
+        def get_completer_delims(self) -> str:  # pylint: disable=no-self-use
+            """Gets characters which delimit words"""
+            return ''
+
+        def set_completer_delims(self, _delims: str) -> None:
+            """Sets characters which delimit words"""
+
+    readline = ReadLine()
+
+GOOD = logging.INFO + 1
+
+DEBUG = False
+
+
+class CommandLineError(Exception):
+    """Error raised by this module when a CLI error occurs."""
+
+
+def add_arg(*args, **kwargs) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
+    """Returns a list containing args and kwargs."""
+    return (args, kwargs)
+
+
+def trim(docstring: str) -> str:
+    """Trims the leading spaces from docstring comments.
+
+    From http://www.python.org/dev/peps/pep-0257/
+
+    """
+    if not docstring:
+        return ''
+    # Convert tabs to spaces (following the normal Python rules)
+    # and split into a list of lines:
+    lines = docstring.expandtabs().splitlines()
+    # Determine minimum indentation (first line doesn't count):
+    indent = sys.maxsize
+    for line in lines[1:]:
+        stripped = line.lstrip()
+        if stripped:
+            indent = min(indent, len(line) - len(stripped))
+    # Remove indentation (first line is special):
+    trimmed = [lines[0].strip()]
+    if indent < sys.maxsize:
+        for line in lines[1:]:
+            trimmed.append(line[indent:].rstrip())
+    # Strip off trailing and leading blank lines:
+    while trimmed and not trimmed[-1]:
+        trimmed.pop()
+    while trimmed and not trimmed[0]:
+        trimmed.pop(0)
+    # Return a single string:
+    return '\n'.join(trimmed)
+
+
+class CommandLineOutput:
+    """A class which allows easy integration of Cmd output into logging
+    and also allows for easy capture of the output for testing purposes.
+
+    """
+
+    def __init__(self, log: Union[logging.Logger, None] = None) -> None:
+        self.captured_output: Union[List[Tuple[str, str]], None] = None
+        self.error_count: int = 0
+        self.fatal_count: int = 0
+        self.buffered_output: str = ""
+        self.log: logging.Logger = log or logging.getLogger(__name__)
+
+    def set_capture_output(self, capture_output: bool) -> None:
+        """Sets capture_output flag, which determines whether the logging
+        output is captured or not.
+
+        """
+        if capture_output:
+            self.captured_output = []
+        else:
+            self.captured_output = None
+
+    def get_captured_output(self) -> Union[List[Tuple[str, str]], None]:
+        """Returns the logging output which has been captured so far."""
+        return self.captured_output
+
+    def get_error_count(self) -> int:
+        """Returns the number of errors which have been recorded in the
+        currently captured output.
+
+        """
+        return self.error_count
+
+    def get_fatal_count(self) -> int:
+        """Returns the number of fatal errors which have been recorded in the
+        currently captured output.
+
+        """
+        return self.fatal_count
+
+    def flush(self) -> None:
+        """Used by Cmd just after printing the prompt."""
+        prompt = self.buffered_output
+        self.buffered_output = ""
+        self.write_prompt(prompt)
+
+    def debug(self, msg: str, *args, **kwargs) -> None:
+        """Captures and logs a debug level message."""
+        self.log.debug(msg, *args, **kwargs)
+
+    def info(self, msg: str, *args, **kwargs) -> None:
+        """Captures and logs an info level message."""
+        if self.captured_output is not None:
+            self.captured_output.append(('info', msg % args))
+        self.log.info(msg, *args, **kwargs)
+
+    def good(self, msg: str, *args, **kwargs) -> None:
+        """Logs a GOOD level string, which the color formatter prints as
+        a green color..
+
+        """
+        self.log.log(GOOD, msg, *args, **kwargs)
+
+    def error(self, msg: str, *args, **kwargs) -> None:
+        """Captures and logs an error level message."""
+        if self.captured_output is not None:
+            self.captured_output.append(('error', msg % args))
+        self.error_count += 1
+        self.log.error(msg, *args, **kwargs)
+
+    def fatal(self, msg: str, *args, **kwargs) -> None:
+        """Captures and logs an fatal level message."""
+        if self.captured_output is not None:
+            self.captured_output.append(('fatal', msg % args))
+        self.fatal_count += 1
+        self.log.fatal(msg, *args, **kwargs)
+
+    def write(self, string: str) -> None:
+        """Characters to output. Lines will be delimited by newline
+        characters.
+
+        This routine breaks the output into lines and logs each line
+        individually.
+
+        """
+        if len(self.buffered_output) > 0:
+            string = self.buffered_output + string
+            self.buffered_output = ""
+        while True:
+            nl_index = string.find('\n')
+            if nl_index < 0:
+                self.buffered_output = string
+                return
+            self.info(string[0:nl_index])
+            string = string[nl_index + 1:]
+
+    def write_prompt(self, prompt: str) -> None:
+        """A derived class can override this method to split out the
+        prompt from regular output.
+
+        """
+        sys.stdout.write(prompt)
+        sys.stdout.flush()
+        self.captured_output = []
+        self.error_count = 0
+        self.fatal_count = 0
+
+
+class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-many-public-methods
+    """Contains common customizations to the Cmd class."""
+
+    cmd_stack = []
+    quitting = False
+    output = None
+
+    def __init__(self, history_filename: str = '', *args, log=None, filename=None, **kwargs) -> None:
+        if 'stdin' in kwargs:
+            Cmd.use_rawinput = False
+        if not CommandLineBase.output:
+            CommandLineBase.output = CommandLineOutput(log=log)
+        self.log = CommandLineBase.output
+        Cmd.__init__(self, stdout=cast(IO[str], self.log), *args, **kwargs)
+        if '-' not in Cmd.identchars:
+            Cmd.identchars += '-'
+        self.filename = filename
+        self.line_num = 0
+        self.command = None
+        if len(CommandLineBase.cmd_stack) == 0:
+            self.cmd_prompt = "CLI"
+        else:
+            self.cmd_prompt = CommandLineBase.cmd_stack[-1].command
+        self.cmdloop_executed = False
+        if 'readline' in sys.modules:
+            delims = readline.get_completer_delims()
+            readline.set_completer_delims(delims.replace("-", ""))
+        self.redirect_filename = ''
+        self.history = []
+        self.history_filename = history_filename
+        self.read_history()
+
+    def add_completion_funcs(self, names, complete_func_name):
+        """Helper function which adds a completion function for an array of
+        command names.
+
+        """
+        for name in names:
+            name = name.replace("-", "_")
+            func_name = "complete_" + name
+            cls = self.__class__
+            try:
+                getattr(cls, func_name)
+            except AttributeError:
+                setattr(cls, func_name, getattr(cls, complete_func_name))
+
+    def default(self, line):
+        """Called when a command isn't recognized."""
+        raise ValueError(f"Unrecognized command: '{line}'")
+
+    def emptyline(self) -> bool:
+        """We want empty lines to do nothing. By default they would repeat the
+        previous command.
+
+        """
+        return False
+
+    def update_prompt(self):
+        """Sets the prompt based on the current command stack."""
+        if Cmd.use_rawinput:
+            prompts = [cmd.cmd_prompt for cmd in CommandLineBase.cmd_stack]
+            self.prompt = " ".join(prompts) + "> "
+        else:
+            self.prompt = ""
+
+    def preloop(self):
+        """Update the prompt before cmdloop, which is where the prompt
+        is used.
+
+        """
+        Cmd.preloop(self)
+        self.update_prompt()
+
+    def postcmd(self, stop, line):
+        """We also update the prompt here since the command stack may
+        have been modified.
+
+        """
+        stop = Cmd.postcmd(self, stop, line)
+        self.update_prompt()
+        return stop
+
+    def auto_cmdloop(self, line):
+        """If line is empty, then we assume that the user wants to enter
+        commands, so we call cmdloop. If line is non-empty, then we assume
+        that a command was entered on the command line, and we'll just
+        execute it, and not hang around for user input. Things get
+        interesting since we also used nested cmd loops. So if the user
+        passes in "servo 15" we'll process the servo 15 using onecmd, and
+        then enter a cmdloop to process the servo specific command. The
+        logic in this function basically says that if we ever waited for
+        user input (i.e. called cmdloop) then we should continue to call
+        cmdloop until the user decides to quit. That way if you run
+        "bioloid.py servo 15" and then press Control-D you'll get to the
+        servo prompt rather than exiting the program.
+
+        """
+        CommandLineBase.cmd_stack.append(self)
+        stop = self.auto_cmdloop_internal(line)
+        CommandLineBase.cmd_stack.pop()
+        return stop
+
+    def auto_cmdloop_internal(self, line) -> Union[bool, None]:
+        """The main code for auto_cmdloop."""
+        try:
+            if len(line) == 0:
+                self.cmdloop()
+            else:
+                self.onecmd(line)
+                if (self.cmdloop_executed and not CommandLineBase.quitting):
+                    self.cmdloop()
+        except KeyboardInterrupt:
+            print('')
+            CommandLineBase.quitting = True
+            return True
+        if CommandLineBase.quitting:
+            return True
+        return None
+
+    def handle_exception(self, err, log=None) -> bool:
+        """Common code for handling an exception."""
+        if not log:
+            log = self.log.error
+        base = CommandLineBase.cmd_stack[0]
+        if base.filename is not None:
+            log("File: %s Line: %d Error: %s", base.filename, base.line_num, err)
+            CommandLineBase.quitting = True
+            return True
+        log("Error: %s", err)
+        return False
+
+    def onecmd(self, line) -> bool:
+        """Override onecmd.
+
+        1 - So we don't have to have a do_EOF method.
+        2 - So we can strip comments
+        3 - So we can track line numbers
+
+        """
+        self.line_num += 1
+        if line == "EOF":
+            if Cmd.use_rawinput:
+                # This means that we printed a prompt, and we'll want to
+                # print a newline to pretty things up for the caller.
+                print('')
+            return True
+        # Strip comments
+        comment_idx = line.find("#")
+        if comment_idx >= 0:
+            line = line[0:comment_idx]
+            line = line.strip()
+        try:
+            return Cmd.onecmd(self, line)
+        except ValueError as err:
+            return self.handle_exception(err)
+
+    def cmdloop(self, intro=None):
+        """We override this to support auto_cmdloop."""
+        self.cmdloop_executed = True
+        return Cmd.cmdloop(self, intro)
+
+    def parseline(  # type: ignore
+            self,
+            line
+    ) -> Tuple[Union[str,
+                     None],
+               Union[List[str],
+                     None],
+               str]:
+        """Record the command that was executed. This also allows us to
+        transform dashes back to underscores, and to convert the command line into a
+        a list of arguments.
+
+        """
+        cmd, arg, line = Cmd.parseline(self, line)
+        if cmd:
+            cmd = cmd.replace("-", "_")
+        if cmd:
+            self.add_line_to_history(cmd)
+            # We prefer to have a list of arguments, and deal with redirection
+            # automatically, so do that now.
+            args = self.line_to_args(cmd, cast(str, arg))
+        else:
+            args = []
+        return cmd, args, line  # type: ignore
+
+    def completenames(self, text, *ignored) -> List[str]:
+        """Override completenames so we can support names which have a dash
+        in them.
+
+        """
+        real_names = Cmd.completenames(self, text.replace("-", "_"), *ignored)
+        return [string.replace("_", "-") for string in real_names]
+
+    def line_to_args(self, cmd: str, arg: str) -> Union[argparse.Namespace, List[str]]:
+        """This will convert the line passed into the do_xxx functions into
+        an array of arguments and handle the Output Redirection Operator.
+        """
+        # Note: using shlex.split causes quoted substrings to stay together.
+        try:
+            args = shlex.split(arg)
+        except ValueError as err:
+            raise CommandLineError(str(err)) from err
+        self.redirect_filename = ''
+        redirect_index = -1
+        if '>' in args:
+            redirect_index = args.index('>')
+        elif '>>' in args:
+            redirect_index = args.index('>>')
+        if redirect_index >= 0:
+            if redirect_index + 1 >= len(args):
+                raise CommandLineError("> requires a filename")
+            self.redirect_filename = args[redirect_index + 1]
+            try:
+                # Since this function runs remotely, it can't depend on other functions,
+                # so we can't call stat_mode.
+                mode = os.stat(self.redirect_filename).st_mode
+            except OSError:
+                mode = 0
+            if not stat.S_ISDIR(mode):
+                raise CommandLineError( \
+                    f"Unable to redirect to '{self.redirect_filename}', directory doesn't exist")
+            if args[redirect_index] == '>':
+                redirect_mode = 'w'
+                self.pr_debug(f'Redirecting (write) to {self.redirect_filename}')
+            else:
+                redirect_mode = 'a'
+                self.pr_debug(f'Redirecting (append) to {self.redirect_filename}')
+            self.stdout = open(self.redirect_filename, redirect_mode, encoding='utf-8')
+            del args[redirect_index + 1]
+            del args[redirect_index]
+
+        args.insert(0, cmd)
+        parser = self.create_argparser(cmd)
+        if parser:
+            args = parser.parse_args(args[1:])
+        return args
+
+    def create_argparser(self, command):
+        """Sets up and parses the command line if an argparse_xxx object exists."""
+        try:
+            argparse_args = getattr(self, "argparse_" + command)
+        except AttributeError:
+            return None
+        doc_lines = getattr(self, "do_" + command).__doc__.expandtabs().splitlines()
+        if '' in doc_lines:
+            blank_idx = doc_lines.index('')
+            usage = doc_lines[:blank_idx]
+            description = doc_lines[blank_idx + 1:]
+        else:
+            usage = doc_lines
+            description = []
+        # pylint: disable=unexpected-keyword-arg
+        parser = argparse.ArgumentParser( \
+            prog=command,
+            usage='\n'.join(usage),
+            description='\n'.join(description),
+            exit_on_error=False)
+        for args, kwargs in argparse_args:
+            parser.add_argument(*args, **kwargs)
+        return parser
+
+    def do_help(self, arg: str) -> Union[bool, None]:
+        """List available commands with "help" or detailed help with
+        "help cmd".
+
+        """
+        # arg isn't really a string - it's a list of strings, but since Cmd provides a do_help
+        # function we have to match the prototype.
+        args = cast(List[str], arg)
+        if len(args) < 2:
+            return Cmd.do_help(self, '') is True
+        help_cmd = args[1]
+        help_cmd = help_cmd.replace("-", "_")
+
+        parser = self.create_argparser(help_cmd)
+        if parser:
+            parser.print_help()
+            return None
+
+        try:
+            doc = getattr(self, 'do_' + help_cmd).__doc__
+            if doc:
+                doc = doc.format(command=help_cmd)
+                self.stdout.write(f"{trim(str(doc))}\n")
+                return None
+        except AttributeError:
+            pass
+        self.stdout.write(f'{str(self.nohelp % (help_cmd,))}\n')
+        return None
+
+    def print(self, *args, end='\n', file=None) -> None:
+        """Like print, but send the output to self.stdout by default."""
+        if file is None:
+            file = self.stdout
+        line = ' '.join(str(arg) for arg in args) + end
+        file.write(line)
+
+    def pr_debug(self, *args, end='\n', file=None) -> None:
+        """Prints only when DEBUG is set to true"""
+        if DEBUG:
+            self.print(*args, end, file)
+
+    def print_topics(
+            self,
+            header: str,
+            cmds: Union[List[str],
+                        None],
+            cmdlen: int,
+            maxcol: int
+    ) -> None:
+        """Transform underscores to dashes when we print the command names."""
+        if isinstance(cmds, list):
+            for i, cmd in enumerate(cmds):
+                cmds[i] = cmd.replace("_", "-")
+        Cmd.print_topics(self, header, cmds, cmdlen, maxcol)
+
+    def do_args(self, args: List[str]) -> Union[bool, None]:
+        """args [arguments...]
+
+           Debug function for verifying argument parsing. This function just
+           prints out each argument that it receives.
+        """
+        for idx, arg in enumerate(args):
+            self.print(f"arg[{idx}] = '{arg}'")
+
+    def do_exit(self, _) -> bool:  # pylint: disable=no-self-use
+        """Exits from the program."""
+        CommandLineBase.quitting = True
+        return True
+
+    def do_quit(self, _) -> bool:  # pylint: disable=no-self-use
+        """Exits from the program."""
+        CommandLineBase.quitting = True
+        return True
+
+    def add_line_to_history(self, line: str) -> None:
+        """Adds a line into the history."""
+        prev_line = ''
+        if len(self.history) > 0:
+            prev_line = self.history[-1]
+        if line and prev_line != line:
+            if len(self.history) >= MAX_HISTORY_LINES:
+                del self.history[0]
+            self.history.append(line)
+
+    def read_history(self) -> None:
+        """Reads history from the history file."""
+        self.history = []
+        if not self.history_filename:
+            return
+        try:
+            with open(self.history_filename, 'r', encoding='utf-8') as file:
+                for line in file:
+                    self.history.append(line.strip())
+        except FileNotFoundError:
+            pass
+
+    def save_history(self) -> None:
+        """Saves history to the history file."""
+        if not self.history_filename:
+            return
+        with open(self.history_filename, 'w', encoding='utf-8') as file:
+            for line in self.history:
+                file.write(line)
+                file.write('\n')
+
+    def do_history(self, args: List[str]) -> Union[bool, None]:
+        """Shwos the history of commands executed."""
+        if len(args) > 1:
+            history_filter = args[1]
+        else:
+            history_filter = '*'
+        for line in self.history:
+            if fnmatch(line, history_filter):
+                self.print(line)
+
+def main():
+    """Test main."""
+    cli = CommandLineBase()
+    cli.cmdloop('')
+
+if __name__ == '__main__':
+    main()
