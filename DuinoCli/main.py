@@ -5,6 +5,7 @@ A CLI program for working with microcontrollers.
 
 import argparse
 import os
+import serial.tools.list_ports
 import sys
 
 from gui_app import GuiApp
@@ -13,6 +14,18 @@ from txt_app import TextApp
 
 HOME = os.getenv('HOME')
 HISTORY_FILENAME = f'{HOME}/.cli_history'
+
+def list_ports():
+    """Displays all of the detected serial ports."""
+    detected = False
+    for port in serial.tools.list_ports.comports():
+        detected = True
+        if port.vid:
+            print('USB Serial Device {:04x}:{:04x}{} found @{}{}\r'.format(
+                  port.vid, port.pid,
+                  extra_info(port), port.device, micropythonPort))
+    if not detected:
+        print('No serial devices detected')
 
 def main_gui() -> None:
     """Main program when run as a GUI."""
@@ -27,7 +40,6 @@ def main_no_gui() -> None:
 def real_main() -> None:
     """Real main"""
     log_setup()
-    print('real_main')
     log_setup()
     default_baud = 115200
     try:
@@ -39,9 +51,9 @@ def real_main() -> None:
     default_port = os.getenv('CLI_PORT')
 
     parser = argparse.ArgumentParser(
-        prog="pycli",
+        prog="DuinoCli",
         usage="%(prog)s [options] [command]",
-        description="Python Shell for a Microcontroller board.",
+        description="Command Line Interface for Arduino boards.",
         epilog=("You can specify the default serial port using the " +
                 "CLI_PORT environment variable.")
     )
@@ -66,12 +78,25 @@ def real_main() -> None:
         help="Display serial ports",
         default=False
     )
+    parser.add_argument(
+        "-n", "--net",
+        dest="net",
+        action="store_true",
+        help="Connect to a DuinoCliServer (localhost:8888)"
+    )
     gui_parser = parser.add_mutually_exclusive_group(required=False)
     gui_parser.add_argument('--gui', dest='gui', action='store_true')
     gui_parser.add_argument('--no-gui', dest='gui', action='store_false')
     parser.set_defaults(gui=False)
 
     args = parser.parse_args(sys.argv[1:])
+
+    if args.list:
+        list_ports()
+        return
+
+    if args.net:
+        port =
 
     if args.gui:
         main_gui()

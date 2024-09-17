@@ -15,3 +15,4 @@ class TextApp:
         """Runs the application."""
         cli = CommandLine(self.history_filename)
         cli.auto_cmdloop('')
+        cli.save_history()

@@ -1,3 +1,5 @@
 pytest==8.2.2
 PyYAML
 yapf
+pyeditline
+pyserial

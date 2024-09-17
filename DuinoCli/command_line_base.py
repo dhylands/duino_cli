@@ -370,8 +370,8 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
         cmd, arg, line = Cmd.parseline(self, line)
         if cmd:
             cmd = cmd.replace("-", "_")
-        if cmd:
-            self.add_line_to_history(cmd)
+        if cmd and cmd != 'history':
+            self.add_line_to_history(line)
             # We prefer to have a list of arguments, and deal with redirection
             # automatically, so do that now.
             args = self.line_to_args(cmd, cast(str, arg))
@@ -455,6 +455,16 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
             parser.add_argument(*args, **kwargs)
         return parser
 
+    argparse_help = (
+        add_arg(
+            '-v', '--verbose',
+            dest='verbose',
+            action='store_true',
+            help='Display more help for each command',
+            default=False
+        ),
+    )
+
     def do_help(self, arg: str) -> Union[bool, None]:
         """List available commands with "help" or detailed help with
         "help cmd".
@@ -463,26 +473,34 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
         # arg isn't really a string - it's a list of strings, but since Cmd provides a do_help
         # function we have to match the prototype.
         args = cast(List[str], arg)
-        if len(args) < 2:
+        if len(args) < 2 and not args.verbose:
             return Cmd.do_help(self, '') is True
         help_cmd = args[1]
         help_cmd = help_cmd.replace("-", "_")
 
-        parser = self.create_argparser(help_cmd)
-        if parser:
-            parser.print_help()
-            return None
+        if not help_cmd:
+            help_cmd = '*'
 
-        try:
-            doc = getattr(self, 'do_' + help_cmd).__doc__
-            if doc:
-                doc = doc.format(command=help_cmd)
-                self.stdout.write(f"{trim(str(doc))}\n")
+        cmds = self.get_names()
+        cmds.sort()
+
+        for cmd in cmds:
+            if fnmatch(cmd, help_cmd):
+                parser = self.create_argparser(cmd)
+                if parser:
+                    parser.print_help()
+                    return None
+
+                try:
+                    doc = getattr(self, 'do_' + cmd).__doc__
+                    if doc:
+                        doc = doc.format(command=cmd)
+                        self.stdout.write(f"{trim(str(doc))}\n")
+                        return None
+                except AttributeError:
+                    pass
+                self.stdout.write(f'{str(self.nohelp % (cmd,))}\n')
                 return None
-        except AttributeError:
-            pass
-        self.stdout.write(f'{str(self.nohelp % (help_cmd,))}\n')
-        return None
 
     def print(self, *args, end='\n', file=None) -> None:
         """Like print, but send the output to self.stdout by default."""
@@ -541,6 +559,7 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
 
     def read_history(self) -> None:
         """Reads history from the history file."""
+        print(f'Reading history from {self.history_filename}')
         self.history = []
         if not self.history_filename:
             return
@@ -553,6 +572,7 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
 
     def save_history(self) -> None:
         """Saves history to the history file."""
+        print(f'Saving history to {self.history_filename}')
         if not self.history_filename:
             return
         with open(self.history_filename, 'w', encoding='utf-8') as file:
@@ -561,7 +581,7 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
                 file.write('\n')
 
     def do_history(self, args: List[str]) -> Union[bool, None]:
-        """Shwos the history of commands executed."""
+        """Shows the history of commands executed."""
         if len(args) > 1:
             history_filter = args[1]
         else:
@@ -574,6 +594,7 @@ def main():
     """Test main."""
     cli = CommandLineBase()
     cli.cmdloop('')
+    cli.save_history()
 
 if __name__ == '__main__':
     main()
