@@ -3,12 +3,15 @@ Base class for a console .
 """
 
 import logging
-from typing import Callable, List
+from typing import List
 
 LOGGER = logging.getLogger(__name__)
 
+# TODO(dhylands): Do we really need this class any more?
 
-class Console:
+
+class Console:  # pylint: disable=too-few-public-methods
+    """Console base class."""
 
     def __init__(self, history_filename: str) -> None:
         """Constructor."""
@@ -20,6 +23,7 @@ class Console:
     def quit(self) -> None:
         """Function called to quit."""
 
+
 #    def line_entered(self, line) -> None:
 #        """Called when the user completes entering a line."""
 #        self.add_line_to_history(line)
@@ -28,7 +32,6 @@ class Console:
 #        """Sets the function that will be called whenever a line is entered."""
 #        self.line_entered_cb = callback
 
-#    def default_line_entered_cb(self, line: str) -> None:  # pylint: disable=no-self-use
+#    def default_line_entered_cb(self, line: str) -> None:
 #        """Default callback function when no user-supplie one is set"""
 #        LOGGER.info('Line Entered: %s', line)
-

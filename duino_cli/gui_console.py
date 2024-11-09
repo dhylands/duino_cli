@@ -3,17 +3,17 @@ Implements a GUI console with an input
 """
 
 import logging
-from typing import Callable, List
 import queue
 import tkinter as tk
 from tkinter.scrolledtext import ScrolledText
 from tkinter import ttk, HORIZONTAL
 
-from command_line import CommandLine
-from console import Console
-from redirect import RedirectStdoutStderr
+from duino_cli.command_line import CommandLine
+from duino_cli.console import Console
+from duino_cli.redirect import RedirectStdoutStderr
 
 LOGGER = logging.getLogger(__name__)
+
 
 class LogHandler(logging.Handler):
     """

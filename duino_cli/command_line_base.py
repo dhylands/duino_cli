@@ -11,9 +11,10 @@ import os
 import shlex
 import stat
 import sys
-from typing import cast, Any, Dict, IO, List, Tuple, Union
+from typing import cast, Any, Dict, IO, List, NoReturn, Tuple, Union
 
-from log_setup import log_setup
+from duino_bus.dump_mem import dump_mem
+from duino_cli.colors import Color
 
 MAX_HISTORY_LINES: int = 40
 
@@ -30,12 +31,15 @@ except ImportError:
     class ReadLine:
         """Fake readine implementation to keep the linter happy"""
 
-        def get_completer_delims(self) -> str:  # pylint: disable=no-self-use
+        def get_completer_delims(self) -> str:
             """Gets characters which delimit words"""
             return ''
 
         def set_completer_delims(self, _delims: str) -> None:
             """Sets characters which delimit words"""
+
+        def read_history_file(self, _filename: str) -> None:
+            """Reads history from a file."""
 
     readline = ReadLine()
 
@@ -46,6 +50,20 @@ DEBUG = False
 
 class CommandLineError(Exception):
     """Error raised by this module when a CLI error occurs."""
+
+
+class CommandArgumentParser(argparse.ArgumentParser):
+    """Helper class to prevent argument parsing from calling sys.exit()"""
+
+    def __init__(self, cli, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.cli = cli
+
+    def exit(self, status=0, message=None) -> NoReturn:
+        """Called when a parsing error occurs."""
+        #if message:
+        #    self.cli.print(message)
+        raise ValueError(message)
 
 
 def add_arg(*args, **kwargs) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
@@ -200,7 +218,14 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
     quitting = False
     output = None
 
-    def __init__(self, history_filename: str = '', *args, log=None, filename=None, **kwargs) -> None:
+    def __init__(
+            self,
+            *args,
+            history_filename: str = '',
+            log=None,
+            filename=None,
+            **kwargs
+    ) -> None:
         if 'stdin' in kwargs:
             Cmd.use_rawinput = False
         if not CommandLineBase.output:
@@ -254,7 +279,7 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
         """Sets the prompt based on the current command stack."""
         if Cmd.use_rawinput:
             prompts = [cmd.cmd_prompt for cmd in CommandLineBase.cmd_stack]
-            self.prompt = " ".join(prompts) + "> "
+            self.prompt = Color.PROMPT_COLOR + " ".join(prompts) + "> " + Color.END_COLOR
         else:
             self.prompt = ""
 
@@ -374,7 +399,10 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
             self.add_line_to_history(line)
             # We prefer to have a list of arguments, and deal with redirection
             # automatically, so do that now.
-            args = self.line_to_args(cmd, cast(str, arg))
+            try:
+                args = self.line_to_args(cmd, cast(str, arg))
+            except CommandLineError:
+                return None, None, ''
         else:
             args = []
         return cmd, args, line  # type: ignore
@@ -421,7 +449,7 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
             else:
                 redirect_mode = 'a'
                 self.pr_debug(f'Redirecting (append) to {self.redirect_filename}')
-            self.stdout = open(self.redirect_filename, redirect_mode, encoding='utf-8')
+            self.stdout = open(self.redirect_filename, redirect_mode, encoding='utf-8')  # pylint: disable=consider-using-with
             del args[redirect_index + 1]
             del args[redirect_index]
 
@@ -446,7 +474,8 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
             usage = doc_lines
             description = []
         # pylint: disable=unexpected-keyword-arg
-        parser = argparse.ArgumentParser( \
+        parser = CommandArgumentParser( \
+            self,
             prog=command,
             usage='\n'.join(usage),
             description='\n'.join(description),
@@ -456,58 +485,84 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
         return parser
 
     argparse_help = (
-        add_arg(
-            '-v', '--verbose',
-            dest='verbose',
-            action='store_true',
-            help='Display more help for each command',
-            default=False
-        ),
+            add_arg(
+                    '-v',
+                    '--verbose',
+                    dest='verbose',
+                    action='store_true',
+                    help='Display more help for each command',
+                    default=False
+            ),
+            add_arg(
+                    'command',
+                    metavar='COMMAND',
+                    nargs='*',
+                    type=str,
+                    help='Command to get help on'
+            ),
     )
 
-    def do_help(self, arg: str) -> Union[bool, None]:
-        """List available commands with "help" or detailed help with
-        "help cmd".
+    def get_commands(self) -> List[str]:
+        """Gets a list of all of the commands."""
+        return [x[3:] for x in self.get_names() if x.startswith('do_')]
 
+    def do_help(self, arg: str) -> Union[bool, None]:
+        """help [-v] [CMD]...
+
+           List available commands with "help" or detailed help with "help cmd".
         """
-        # arg isn't really a string - it's a list of strings, but since Cmd provides a do_help
+        # arg isn't really a string but since Cmd provides a do_help
         # function we have to match the prototype.
-        args = cast(List[str], arg)
-        if len(args) < 2 and not args.verbose:
+        args = cast(argparse.Namespace, arg)
+        if len(args.command) <= 0 and not args.verbose:
             return Cmd.do_help(self, '') is True
-        help_cmd = args[1]
+        if len(args.command) == 0:
+            help_cmd = ''
+        else:
+            help_cmd = args.command[0]
         help_cmd = help_cmd.replace("-", "_")
 
         if not help_cmd:
             help_cmd = '*'
 
-        cmds = self.get_names()
+        cmds = self.get_commands()
         cmds.sort()
 
+        blank_line = False
         for cmd in cmds:
             if fnmatch(cmd, help_cmd):
+                if blank_line:
+                    print('--------------------------------------------------------------')
+                blank_line = True
                 parser = self.create_argparser(cmd)
                 if parser:
+                    # Need to figure out how to strip out the `usage:`
+                    # Need to figure out how to get indentation to work
                     parser.print_help()
-                    return None
+                    continue
 
                 try:
                     doc = getattr(self, 'do_' + cmd).__doc__
                     if doc:
                         doc = doc.format(command=cmd)
                         self.stdout.write(f"{trim(str(doc))}\n")
-                        return None
+                        continue
                 except AttributeError:
                     pass
                 self.stdout.write(f'{str(self.nohelp % (cmd,))}\n')
-                return None
+        return None
 
     def print(self, *args, end='\n', file=None) -> None:
-        """Like print, but send the output to self.stdout by default."""
+        """Like print, but allows for redirection."""
         if file is None:
             file = self.stdout
         line = ' '.join(str(arg) for arg in args) + end
         file.write(line)
+        file.flush()
+
+    def dump_mem(self, buf, prefix='', addr=0) -> None:
+        """Like print, but allows for redirection."""
+        dump_mem(buf, prefix, addr, log=self.print)
 
     def pr_debug(self, *args, end='\n', file=None) -> None:
         """Prints only when DEBUG is set to true"""
@@ -537,13 +592,19 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
         for idx, arg in enumerate(args):
             self.print(f"arg[{idx}] = '{arg}'")
 
-    def do_exit(self, _) -> bool:  # pylint: disable=no-self-use
-        """Exits from the program."""
+    def do_exit(self, _) -> bool:
+        """exit
+
+           Exits from the program.
+        """
         CommandLineBase.quitting = True
         return True
 
-    def do_quit(self, _) -> bool:  # pylint: disable=no-self-use
-        """Exits from the program."""
+    def do_quit(self, _) -> bool:
+        """quit
+
+           Exits from the program.
+        """
         CommandLineBase.quitting = True
         return True
 
@@ -567,6 +628,7 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
             with open(self.history_filename, 'r', encoding='utf-8') as file:
                 for line in file:
                     self.history.append(line.strip())
+            readline.read_history_file(self.history_filename)
         except FileNotFoundError:
             pass
 
@@ -581,7 +643,10 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
                 file.write('\n')
 
     def do_history(self, args: List[str]) -> Union[bool, None]:
-        """Shows the history of commands executed."""
+        """history [FILTER]
+
+           Shows the history of commands executed.
+        """
         if len(args) > 1:
             history_filter = args[1]
         else:
@@ -590,11 +655,13 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
             if fnmatch(line, history_filter):
                 self.print(line)
 
+
 def main():
     """Test main."""
     cli = CommandLineBase()
     cli.cmdloop('')
     cli.save_history()
+
 
 if __name__ == '__main__':
     main()

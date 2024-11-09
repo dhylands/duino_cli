@@ -4,60 +4,28 @@ for use on an ANSI console.
 
 """
 
+import argparse
 import logging
+import sys
 import time
 
-# Attributes
-# 0	Reset all attributes
-# 1	Bright
-# 2	Dim
-# 4	Underscore
-# 5	Blink
-# 7	Reverse
-# 8	Hidden
-
-LT_BLACK = "\x1b[1;30m"
-LT_RED = "\x1b[1;31m"
-LT_GREEN = "\x1b[1;32m"
-LT_YELLOW = "\x1b[1;33m"
-LT_BLUE = "\x1b[1;34m"
-LT_MAGENTA = "\x1b[1;35m"
-LT_CYAN = "\x1b[1;36m"
-LT_WHITE = "\x1b[1;37m"
-
-DK_BLACK = "\x1b[2;30m"
-DK_RED = "\x1b[2;31m"
-DK_GREEN = "\x1b[2;32m"
-DK_YELLOW = "\x1b[2;33m"
-DK_BLUE = "\x1b[2;34m"
-DK_MAGENTA = "\x1b[2;35m"
-DK_CYAN = "\x1b[2;36m"
-DK_WHITE = "\x1b[2;37m"
-
-NO_COLOR = "\x1b[0m"
+from duino_cli.colors import Color
+from duino_cli.log_setup import log_setup
 
 # Colors to print to the console for a given warning level. %(color)s will be
 # replaced with the color indicated for a given warning level.
 
 COLORS = {
-    'WARNING': LT_YELLOW,
-    'INFO': "",
-    'Level 21': DK_GREEN,
-    'DEBUG': LT_BLUE,
-    'CRITICAL': LT_RED,
-    'ERROR': LT_RED
+        'WARNING': Color.WARNING_COLOR,
+        'INFO': Color.INFO_COLOR,
+        'DEBUG': Color.DEBUG_COLOR,
+        'CRITICAL': Color.CRITICAL_COLOR,
+        'ERROR': Color.ERROR_COLOR
 }
 
 # Single letter code to print using %(levelchar)s
 
-LEVELCHAR = {
-    'WARNING': 'W',
-    'INFO': 'I',
-    'Level 21': 'G',
-    'DEBUG': 'D',
-    'CRITICAL': 'C',
-    'ERROR': 'E'
-}
+LEVELCHAR = {'WARNING': 'W', 'INFO': 'I', 'DEBUG': 'D', 'CRITICAL': 'C', 'ERROR': 'E'}
 
 
 class ColoredFormatter(logging.Formatter):
@@ -84,7 +52,7 @@ class ColoredFormatter(logging.Formatter):
             if len(record.color) == 0:  # type: ignore
                 record.nocolor = ""
             else:
-                record.nocolor = NO_COLOR
+                record.nocolor = Color.NO_COLOR
         else:
             record.color = ""
             record.nocolor = ""
@@ -109,15 +77,18 @@ def test_main():
 
     """
     parser = argparse.ArgumentParser(
-        prog="log-test",
-        usage="%(prog)s [options]",
-        description="Testing for the loggind module")
-    parser.add_argument("-d",
-                        "--debug",
-                        dest="debug",
-                        action="store_true",
-                        help="Enable debug features",
-                        default=False)
+            prog="log-test",
+            usage="%(prog)s [options]",
+            description="Testing for the loggind module"
+    )
+    parser.add_argument(
+            "-d",
+            "--debug",
+            dest="debug",
+            action="store_true",
+            help="Enable debug features",
+            default=False
+    )
     args = parser.parse_args(sys.argv[1:])
 
     log_setup(cfg_path='../logging.cfg')
@@ -135,8 +106,4 @@ def test_main():
 
 
 if __name__ == "__main__":
-    import argparse
-    import sys
-    from log_setup import log_setup
-
     test_main()
