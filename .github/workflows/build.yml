@@ -1,0 +1,61 @@
+name: Build Actions for duino_cli
+
+on: [push, pull_request]
+
+# DuinoLed has no source files that are unottest-able
+#
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./libraries/duino_cli
+    steps:
+
+    # Checkout the repository
+
+    - name: Checkout duino_cli
+      uses: actions/checkout@v4
+      with:
+        path: libraries/duino_cli
+
+    - name: Checkout duino_bus
+      uses: actions/checkout@v4
+      with:
+        path: libraries/duino_bus
+
+    - name: Checkout duino_log
+      uses: actions/checkout@v4
+      with:
+        repository: dhylands/duino_log
+        path: libraries/duino_log
+
+    - name: Checkout duino_util
+      uses: actions/checkout@v4
+      with:
+        repository: dhylands/duino_util
+        path: libraries/duino_util
+
+    - name: Checkout duino_makefile
+      uses: actions/checkout@v4
+      with:
+        repository: dhylands/duino_makefile
+        path: libraries/duino_makefile
+
+    - name: Install tools
+      run: make BOARD=pico install-tools
+
+    - name: Run tools (test-style, lint, docs, unittest, coverage)
+      run: make BOARD=pico run-tools
+
+    - name: Install Arduino library dependencies
+      run: make BOARD=pico install-deps
+
+    - name: Make sure all of the examples compile
+      run: make BOARD=pico compile-examples
+
+    - name: Install python tools
+      run: make BOARD=pico install-python-tools
+
+    - name: Run python tools
+      run: make BOARD=pico run-python-tools

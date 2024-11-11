@@ -42,14 +42,9 @@ setup(
                 'Topic :: Terminals :: Serial',
                 'Topic :: Utilities',
         ],
-        install_requires=[
-                'pyserial',
-                'pyudev >= 0.16',
-        ],
+        install_requires=['pyserial'],
         entry_points={
-                'console_scripts': [
-                        'cli=duino_cli.command_line:main'
-                ],
+                'console_scripts': ['cli=duino_cli.command_line:main'],
         },
         extras_require={':sys_platform == "win32"': ['pyreadline']}
 )

@@ -84,7 +84,7 @@ def real_main() -> None:
     default_nocolor = not default_color
 
     parser = argparse.ArgumentParser(
-            prog='DuinoCli',
+            prog='duino_cli',
             usage='%(prog)s [options] [command]',
             description='Command Line Interface for Arduino boards.',
             epilog=(
@@ -121,7 +121,7 @@ def real_main() -> None:
             '--net',
             dest='net',
             action='store_true',
-            help=f'Connect to a DuinoCliServer (localhost:{SocketBus.DEFAULT_PORT})'
+            help=f'Connect to a duino_cli_server (localhost:{SocketBus.DEFAULT_PORT})'
     )
     parser.add_argument(
             '-d',

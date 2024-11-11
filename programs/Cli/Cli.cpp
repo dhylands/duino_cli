@@ -8,7 +8,7 @@
  *
  ****************************************************************************/
 /**
- *   @file   Cii.cpp
+ *   @file   Cli.cpp
  *
  *   @brief  Test program to implement a C++ client to connect to the CliServer
  *
@@ -56,7 +56,7 @@ enum {
 
 static const char* g_pgm_name;
 
-struct option g_long_option[] = {
+static struct option g_long_option[] = {
     // clang-format off
     // option       has_arg              flasg      val
     // -----------  ------------------- ----------- ------------

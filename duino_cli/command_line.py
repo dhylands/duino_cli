@@ -10,7 +10,7 @@ from os import path
 import struct
 from typing import List, Union, NamedTuple, Tuple
 
-# The File class shoul be moved to the DuinoLittleFs module
+# The File class shoul be moved to the duino_littlefs module
 from duino_bus.bus import IBus
 from duino_bus.packet import ErrorCode, Packet
 from duino_bus.packer import Packer
@@ -95,7 +95,7 @@ class CommandLine(CommandLineBase):  # pylint: disable=too-many-public-methods
     #########################################################################
     ##
     ## The following functions don't really belong here. They should go into
-    ## the DuinoLittleFs directory as command_line functions
+    ## the duino_littlefs directory as command_line functions
     ##
     #########################################################################
 
@@ -389,7 +389,7 @@ class CommandLine(CommandLineBase):  # pylint: disable=too-many-public-methods
     #########################################################################
     ##
     ## The following functions don't really belong here. They should go into
-    ## the DuinoLittleFs directory as bus/packet functions.
+    ## the duino_littlefs directory as bus/packet functions.
     ##
     #########################################################################
 

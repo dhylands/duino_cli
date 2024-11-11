@@ -1,5 +1,7 @@
-pytest==8.2.2
-PyYAML
+pytest
+pylint
+pyyaml
 yapf
 pyeditline
 pyserial
+twine

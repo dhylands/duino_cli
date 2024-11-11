@@ -8,7 +8,7 @@
  *
  ****************************************************************************/
 /**
- *   @file   DuinoCii.h
+ *   @file   duino_cli.h
  *
  *   @brief  Test program to implement a C++ client to connect to the CliServer
  *
