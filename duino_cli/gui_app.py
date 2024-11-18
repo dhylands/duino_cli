@@ -4,6 +4,8 @@ Implements a GUI based app.
 
 import signal
 
+from typing import cast, Any, Dict
+
 import tkinter as tk
 from tkinter import ttk, HORIZONTAL
 
@@ -15,7 +17,7 @@ from duino_cli.gui_console import GuiConsole
 class App:  # pylint: disable=too-few-public-methods
     """The class for the main application."""
 
-    def __init__(self, root, bus: IBus, history_filename: str) -> None:
+    def __init__(self, root, params: Dict[str, Any]) -> None:
         self.root = root
         root.title('Command Line Interface')
         root.minsize(400, 400)
@@ -30,8 +32,9 @@ class App:  # pylint: disable=too-few-public-methods
         console_frame.rowconfigure(0, weight=1)
         horizontal_pane.add(console_frame, weight=1)
         console_frame.grid_propagate(False)
-        self.cli = CommandLine(bus, history_filename=history_filename)
-        self.console = GuiConsole(self.cli, console_frame, self.root, history_filename)
+        bus = cast(IBus, params['bus'])
+        self.cli = CommandLine(params)
+        self.console = GuiConsole(self.cli, console_frame, self.root)
         self.console.focus_set()
 
         self.root.protocol('WM_DELETE_WINDOW', self.quit)
@@ -47,12 +50,12 @@ class App:  # pylint: disable=too-few-public-methods
 class GuiApp:  # pylint: disable=too-few-public-methods
     """Creates objects needed to run a GUI app."""
 
-    def __init__(self, history_filename: str) -> None:
+    def __init__(self, params: Dict[str, Any]) -> None:
         """Constructor."""
-        self.history_filename = history_filename
+        self.params = params
 
-    def run(self, bus: IBus) -> None:
+    def run(self) -> None:
         """Runs the main application."""
         root = tk.Tk()
-        app = App(root, bus, self.history_filename)
+        app = App(root, self.params)
         app.root.mainloop()

@@ -8,7 +8,7 @@ from operator import attrgetter
 import os
 from os import path
 import struct
-from typing import List, Union, NamedTuple, Tuple
+from typing import Any, cast, Dict, List, Union, NamedTuple, Tuple
 
 # The File class shoul be moved to the duino_littlefs module
 from duino_bus.bus import IBus
@@ -34,7 +34,6 @@ FLAGS_DIR = 1
 
 LOGGER = logging.getLogger(__name__)
 
-PING = 0x01  # Check to see if the device is alive.
 
 FORMAT = 0x40  # Format a file system.
 INFO = 0x41  # Return info about a file system.
@@ -63,34 +62,14 @@ class CommandLine(CommandLineBase):  # pylint: disable=too-many-public-methods
 
     def __init__(
             self,
-            bus: IBus,
+            params: Dict[str, Any],
             *args,
-            history_filename: str = '',
             capture_output=False,
             **kwargs
     ):
-        CommandLineBase.__init__(self, *args, history_filename=history_filename, **kwargs)
-        self.bus = bus
+        super().__init__(params, *args, **kwargs)
+        self.bus = cast(IBus, params['bus'])
         self.log.set_capture_output(capture_output)
-
-    def do_echo(self, args) -> Union[bool, None]:
-        """echo [STRING]...
-
-           Similar to linux echo.
-        """
-        line = ' '.join(args[1:])
-        self.print(line)
-
-    def do_ping(self, _) -> None:
-        """ping
-
-           Sends a PING packet to the arduino and reports a response.
-        """
-        ping = Packet(PING)
-        err, _rsp = self.bus.send_command_get_response(ping)
-        if err != ErrorCode.NONE:
-            return
-        self.print('Device is alive')
 
     #########################################################################
     ##

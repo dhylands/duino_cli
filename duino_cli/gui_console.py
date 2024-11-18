@@ -3,13 +3,14 @@ Implements a GUI console with an input
 """
 
 import logging
+from typing import Any, cast, Dict
 import queue
+
 import tkinter as tk
 from tkinter.scrolledtext import ScrolledText
 from tkinter import ttk, HORIZONTAL
 
 from duino_cli.command_line import CommandLine
-from duino_cli.console import Console
 from duino_cli.redirect import RedirectStdoutStderr
 
 LOGGER = logging.getLogger(__name__)
@@ -37,12 +38,11 @@ class LogHandler(logging.Handler):
         self.log_queue.put(record)
 
 
-class GuiConsole(Console):  # pylint: disable=too-many-instance-attributes
+class GuiConsole:  # pylint: disable=too-many-instance-attributes
     """Poll messages from a logging queue and display them in a scrolled text widget"""
 
-    def __init__(self, cli: CommandLine, frame, root, history_filename: str) -> None:
+    def __init__(self, cli: CommandLine, frame, root) -> None:
         """Constructor."""
-        super().__init__(history_filename)
         self.cli = cli
         self.frame = frame
         self.root = root
@@ -98,6 +98,8 @@ class GuiConsole(Console):  # pylint: disable=too-many-instance-attributes
 
     def key_entered(self, evt) -> str:
         """Called when the up/down arrow keys are entered."""
+        # TODO: Fix to get history from the cli
+        self.history = []
         if evt.keysym == 'Up':
             if self.history_idx < 0:
                 self.history_idx = len(self.history)

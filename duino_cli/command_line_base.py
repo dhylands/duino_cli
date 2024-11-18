@@ -6,17 +6,20 @@ This module implements a command line interface
 import argparse
 from cmd import Cmd
 from fnmatch import fnmatch
+import importlib.util
 import logging
 import os
+from pathlib import Path
 import shlex
 import stat
 import sys
-from typing import cast, Any, Dict, IO, List, NoReturn, Tuple, Union
+from typing import cast, Any, Callable, Dict, IO, List, NoReturn, Tuple, Union
 
 from duino_bus.dump_mem import dump_mem
 from duino_cli.colors import Color
 
 MAX_HISTORY_LINES: int = 40
+LOGGER = logging.getLogger(__name__)
 
 # argparse added exit_on_error support in 3.9
 if sys.version_info >= (3, 9, 0):
@@ -220,12 +223,15 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
 
     def __init__(
             self,
+            params: Dict[str, Any],
             *args,
-            history_filename: str = '',
             log=None,
             filename=None,
             **kwargs
     ) -> None:
+        self.params = params
+        self.plugins = []
+        self.bus = params['bus']
         if 'stdin' in kwargs:
             Cmd.use_rawinput = False
         if not CommandLineBase.output:
@@ -247,8 +253,35 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
             readline.set_completer_delims(delims.replace("-", ""))
         self.redirect_filename = ''
         self.history = []
-        self.history_filename = history_filename
+        self.history_filename = params['history_filename']
         self.read_history()
+        self.load_plugins()
+
+    def load_plugins(self) -> None:
+        plugins_dir = cast(str, self.params['plugins_dir'])
+        """Loads plugins from `plugins_dir`."""
+        if not os.path.isdir(plugins_dir):
+            return
+        self.plugins = []
+        for plugin_path in Path(plugins_dir).glob("*.py"):
+            plugin_name = plugin_path.stem
+            if plugin_name.startswith(".") or plugin_name.startswith("__"):
+                continue
+            spec = importlib.util.spec_from_file_location(plugin_name, plugin_path)
+            if spec is None:
+                continue
+            module = importlib.util.module_from_spec(spec)
+            if spec.loader is None:
+                continue
+            print('Loading Plugin', plugin_name)
+            spec.loader.exec_module(module)
+            plugin = module.CliPlugin(self)
+            self.plugins.append(plugin)
+        if len(self.plugins) == 0:
+            print('No plugins found')
+            return
+        print('All plugins loaded')
+
 
     def add_completion_funcs(self, names, complete_func_name):
         """Helper function which adds a completion function for an array of
@@ -370,7 +403,17 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
             line = line[0:comment_idx]
             line = line.strip()
         try:
-            return Cmd.onecmd(self, line)
+            # We would normally use Cmd.onecmd here, but that doesn't work with
+            # plugins, so we duplicate the functionality here instead
+            cmd, arg, line = self.parseline(line)
+            if not line:
+                return self.emptyline()
+            if cmd is None or cmd == '':
+                return self.default(line)
+            fn = self.get_command(cmd)
+            if fn:
+                return fn(arg)
+            return self.default(line)
         except ValueError as err:
             return self.handle_exception(err)
 
@@ -459,13 +502,12 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
             args = parser.parse_args(args[1:])
         return args
 
-    def create_argparser(self, command):
+    def create_argparser(self, command) -> Union[None, CommandArgumentParser]:
         """Sets up and parses the command line if an argparse_xxx object exists."""
-        try:
-            argparse_args = getattr(self, "argparse_" + command)
-        except AttributeError:
+        argparse_args = self.get_command_args(command)
+        if not argparse_args:
             return None
-        doc_lines = getattr(self, "do_" + command).__doc__.expandtabs().splitlines()
+        doc_lines = self.get_command_help(command).expandtabs().splitlines()
         if '' in doc_lines:
             blank_idx = doc_lines.index('')
             usage = doc_lines[:blank_idx]
@@ -483,6 +525,51 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
         for args, kwargs in argparse_args:
             parser.add_argument(*args, **kwargs)
         return parser
+
+    def get_commands(self) -> List[str]:
+        """Gets a list of all of the commands."""
+        commands = []
+        for plugin in self.plugins:
+            commands.extend(plugin.get_commands())
+        commands.extend([x[3:] for x in Cmd.get_names(self) if x.startswith('do_')])
+        return commands
+
+    def get_command(self, command:str) -> Union[Callable, None]:
+        """Retrieves the function object associated with a command."""
+        for plugin in self.plugins:
+            cmd = plugin.get_command(command)
+            if cmd:
+                return cmd
+        try:
+            fn = getattr(self, "do_" + command)
+            return fn
+        except AttributeError:
+            return None
+
+    def get_command_help(self, command:str) -> str:
+        """Retrieves the documentation associated with a command."""
+        fn = self.get_command(command)
+        if fn:
+            return fn.__doc__ or ''
+        return ''
+
+    def get_command_args(self, command:str) -> Union[None,Tuple]:
+        """Retrievers the argparse arguments for a command."""
+        for plugin in self.plugins:
+            args = plugin.get_command_args(command)
+            if args:
+                return args
+        try:
+            argparse_args = getattr(self, "argparse_" + command)
+        except AttributeError:
+            return None
+        return argparse_args
+
+    def help_command_list(self) -> None:
+        """Prints the list of commands."""
+        commands = sorted(self.get_commands())
+        self.print_topics('Type "help <command>" to get more information on a command:',
+                                 commands, 0, 80)
 
     argparse_help = (
             add_arg(
@@ -502,10 +589,6 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
             ),
     )
 
-    def get_commands(self) -> List[str]:
-        """Gets a list of all of the commands."""
-        return [x[3:] for x in self.get_names() if x.startswith('do_')]
-
     def do_help(self, arg: str) -> Union[bool, None]:
         """help [-v] [CMD]...
 
@@ -515,7 +598,8 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
         # function we have to match the prototype.
         args = cast(argparse.Namespace, arg)
         if len(args.command) <= 0 and not args.verbose:
-            return Cmd.do_help(self, '') is True
+            self.help_command_list()
+            return None
         if len(args.command) == 0:
             help_cmd = ''
         else:
@@ -528,12 +612,12 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
         cmds = self.get_commands()
         cmds.sort()
 
-        blank_line = False
+        cmd_found = False
         for cmd in cmds:
             if fnmatch(cmd, help_cmd):
-                if blank_line:
-                    print('--------------------------------------------------------------')
-                blank_line = True
+                if cmd_found:
+                    self.print('--------------------------------------------------------------')
+                cmd_found = True
                 parser = self.create_argparser(cmd)
                 if parser:
                     # Need to figure out how to strip out the `usage:`
@@ -542,7 +626,7 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
                     continue
 
                 try:
-                    doc = getattr(self, 'do_' + cmd).__doc__
+                    doc = self.get_command_help(cmd)
                     if doc:
                         doc = doc.format(command=cmd)
                         self.stdout.write(f"{trim(str(doc))}\n")
@@ -550,6 +634,8 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
                 except AttributeError:
                     pass
                 self.stdout.write(f'{str(self.nohelp % (cmd,))}\n')
+        if not cmd_found:
+            self.print(f'No command found matching "{help_cmd}"')
         return None
 
     def print(self, *args, end='\n', file=None) -> None:
@@ -557,6 +643,15 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
         if file is None:
             file = self.stdout
         line = ' '.join(str(arg) for arg in args) + end
+        file.write(line)
+        file.flush()
+
+    def error(self, *args, end='\n', file=None) -> None:
+        """Like print, but allows for redirection."""
+        if file is None:
+            file = self.stdout
+        line = ' '.join(str(arg) for arg in args) + end
+
         file.write(line)
         file.flush()
 
@@ -582,15 +677,6 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
             for i, cmd in enumerate(cmds):
                 cmds[i] = cmd.replace("_", "-")
         Cmd.print_topics(self, header, cmds, cmdlen, maxcol)
-
-    def do_args(self, args: List[str]) -> Union[bool, None]:
-        """args [arguments...]
-
-           Debug function for verifying argument parsing. This function just
-           prints out each argument that it receives.
-        """
-        for idx, arg in enumerate(args):
-            self.print(f"arg[{idx}] = '{arg}'")
 
     def do_exit(self, _) -> bool:
         """exit
@@ -654,14 +740,3 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
         for line in self.history:
             if fnmatch(line, history_filter):
                 self.print(line)
-
-
-def main():
-    """Test main."""
-    cli = CommandLineBase()
-    cli.cmdloop('')
-    cli.save_history()
-
-
-if __name__ == '__main__':
-    main()

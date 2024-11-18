@@ -4,7 +4,9 @@ A CLI program for working with microcontrollers.
 """
 
 import argparse
+import importlib.util
 import os
+from pathlib import Path
 import sys
 
 try:
@@ -12,14 +14,18 @@ try:
 except ModuleNotFoundError:
     termios = None  # pylint: disable=invalid-name
 
+from typing import Any, Dict, List
+
 import serial.tools.list_ports
 from serial import SerialException
 
+import duino_bus
 from duino_bus.socket_bus import IBus
 from duino_bus.serial_bus import SerialBus
 from duino_bus.socket_bus import SocketBus
 
 from duino_cli import colors
+from duino_cli.command_line_base import CommandLineBase
 from duino_cli.gui_app import GuiApp
 from duino_cli.log_setup import log_setup
 from duino_cli.txt_app import TextApp
@@ -56,17 +62,16 @@ def list_ports():
     if not detected:
         print('No serial devices detected')
 
-
-def main_gui(bus: IBus) -> None:
+def main_gui(params: Dict[str, Any]) -> None:
     """Main program when run as a GUI."""
-    gui_app = GuiApp(HISTORY_FILENAME)
-    gui_app.run(bus)
+    gui_app = GuiApp(params)
+    gui_app.run()
 
 
-def main_no_gui(bus: IBus) -> None:
+def main_no_gui(params: Dict[str, Any]) -> None:
     """Main program when no as a text console."""
-    txt_app = TextApp(HISTORY_FILENAME)
-    txt_app.run(bus)
+    txt_app = TextApp(params)
+    txt_app.run()
 
 
 def real_main() -> None:
@@ -82,15 +87,17 @@ def real_main() -> None:
     default_port = os.getenv('CLI_PORT')
     default_color = sys.stdout.isatty()
     default_nocolor = not default_color
+    default_plugins_dir = os.getenv("CLI_PLUGINS_DIR") or 'plugins'
 
     parser = argparse.ArgumentParser(
             prog='duino_cli',
             usage='%(prog)s [options] [command]',
             description='Command Line Interface for Arduino boards.',
-            epilog=(
-                    'You can specify the default serial port using the '
-                    + 'CLI_PORT environment variable.'
-            )
+            epilog='You can specify the default serial port using the '
+            'CLI_PORT environment variable.\n'
+            'You can specify the defaut plugin directory using the '
+            'CLI_PLUGINS_DIR environment variable.',
+            formatter_class = argparse.RawTextHelpFormatter
     )
     parser.add_argument(
             '-p',
@@ -137,13 +144,22 @@ def real_main() -> None:
             help="Turn off colorized output",
             default=default_nocolor
     )
+    parser.add_argument(
+            '--plugins',
+            dest='plugins_dir',
+            help=f'Set where directories are loaded from (default = {default_plugins_dir})',
+            default=default_plugins_dir
+    )
 
     #gui_parser = parser.add_mutually_exclusive_group(required=False)
     #gui_parser.add_argument('--gui', dest='gui', action='store_true')
     #gui_parser.add_argument('--no-gui', dest='gui', action='store_false')
     #parser.set_defaults(gui=False)
 
-    args = parser.parse_args(sys.argv[1:])
+    try:
+        args = parser.parse_args(sys.argv[1:])
+    except SystemExit:
+        return
 
     if args.list:
         list_ports()
@@ -151,6 +167,10 @@ def real_main() -> None:
 
     if args.nocolor:
         colors.set_nocolor()
+
+    params = {}
+    params['plugins_dir'] = args.plugins_dir
+    params['history_filename'] = HISTORY_FILENAME
 
     bus = SocketBus()
     if args.net:
@@ -167,10 +187,12 @@ def real_main() -> None:
     if args.debug:
         bus.set_debug(True)
 
+    params['bus'] = bus
+
     #if args.gui:
-    #    main_gui(bus)
+    #    main_gui(params)
     #else:
-    main_no_gui(bus)
+    main_no_gui(params)
 
 
 def main():
