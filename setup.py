@@ -44,7 +44,7 @@ setup(
         install_requires=['pyserial'],
         entry_points={
                 'console_scripts': ['cli=duino_cli.command_line:main'],
-                'duino_cli.plugin': ['core=duino_cli.core_plugin:CliPlugin']
+                'duino_cli.plugin': ['core=duino_cli.core_plugin:CorePlugin']
         },
         extras_require={':sys_platform == "win32"': ['pyreadline']}
 )

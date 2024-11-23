@@ -3,7 +3,6 @@ Implements a GUI console with an input
 """
 
 import logging
-from typing import Any, cast, Dict
 import queue
 
 import tkinter as tk
@@ -81,6 +80,8 @@ class GuiConsole:  # pylint: disable=too-many-instance-attributes
         logging.getLogger('').addHandler(self.queue_handler)
         # Start polling messages from the queue
         self.frame.after(100, self.poll_log_queue)
+        self.history_idx = -1
+        self.history = []
 
     def gui_line_entered(self, _ev) -> str:
         """Called when the user presses ENTER."""
@@ -98,7 +99,7 @@ class GuiConsole:  # pylint: disable=too-many-instance-attributes
 
     def key_entered(self, evt) -> str:
         """Called when the up/down arrow keys are entered."""
-        # TODO: Fix to get history from the cli
+        # TODO(dhylands): Fix to get history from the cli
         self.history = []
         if evt.keysym == 'Up':
             if self.history_idx < 0:

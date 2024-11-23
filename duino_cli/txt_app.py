@@ -4,7 +4,6 @@ Implements a Text based app.
 
 from typing import Any, Dict
 
-from duino_bus.bus import IBus
 from duino_cli.command_line import CommandLine
 
 

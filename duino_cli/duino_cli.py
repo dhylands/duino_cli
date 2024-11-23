@@ -4,9 +4,7 @@ A CLI program for working with microcontrollers.
 """
 
 import argparse
-import importlib.util
 import os
-from pathlib import Path
 import sys
 
 try:
@@ -14,18 +12,15 @@ try:
 except ModuleNotFoundError:
     termios = None  # pylint: disable=invalid-name
 
-from typing import Any, Dict, List
+from typing import Any, Dict\
 
 import serial.tools.list_ports
 from serial import SerialException
 
-import duino_bus
-from duino_bus.socket_bus import IBus
 from duino_bus.serial_bus import SerialBus
 from duino_bus.socket_bus import SocketBus
 
 from duino_cli import colors
-from duino_cli.command_line_base import CommandLineBase
 # from duino_cli.gui_app import GuiApp
 from duino_cli.log_setup import log_setup
 from duino_cli.txt_app import TextApp
@@ -62,6 +57,7 @@ def list_ports():
     if not detected:
         print('No serial devices detected')
 
+
 #def main_gui(params: Dict[str, Any]) -> None:
 #    """Main program when run as a GUI."""
 #    gui_app = GuiApp(params)
@@ -97,7 +93,7 @@ def real_main() -> None:
             'CLI_PORT environment variable.\n',
             #'You can specify the defaut plugin directory using the '
             #'CLI_PLUGINS_DIR environment variable.',
-            formatter_class = argparse.RawTextHelpFormatter
+            formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument(
             '-p',
@@ -144,12 +140,6 @@ def real_main() -> None:
             help="Turn off colorized output",
             default=default_nocolor
     )
-    #parser.add_argument(
-    #        '--plugins',
-    #        dest='plugins_dir',
-    #        help=f'Set where directories are loaded from (default = {default_plugins_dir})',
-    #        default=default_plugins_dir
-    #)
 
     #gui_parser = parser.add_mutually_exclusive_group(required=False)
     #gui_parser.add_argument('--gui', dest='gui', action='store_true')
@@ -188,6 +178,7 @@ def real_main() -> None:
         bus.set_debug(True)
 
     params['bus'] = bus
+    params['debug'] = args.debug
 
     #if args.gui:
     #    main_gui(params)

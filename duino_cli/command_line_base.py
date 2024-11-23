@@ -9,7 +9,6 @@ from fnmatch import fnmatch
 import importlib.metadata
 import logging
 import os
-from pathlib import Path
 import shlex
 import stat
 import sys
@@ -73,37 +72,6 @@ class CommandArgumentParser(argparse.ArgumentParser):
 def add_arg(*args, **kwargs) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
     """Returns a list containing args and kwargs."""
     return (args, kwargs)
-
-
-def trim(docstring: str) -> str:
-    """Trims the leading spaces from docstring comments.
-
-    From http://www.python.org/dev/peps/pep-0257/
-
-    """
-    if not docstring:
-        return ''
-    # Convert tabs to spaces (following the normal Python rules)
-    # and split into a list of lines:
-    lines = docstring.expandtabs().splitlines()
-    # Determine minimum indentation (first line doesn't count):
-    indent = sys.maxsize
-    for line in lines[1:]:
-        stripped = line.lstrip()
-        if stripped:
-            indent = min(indent, len(line) - len(stripped))
-    # Remove indentation (first line is special):
-    trimmed = [lines[0].strip()]
-    if indent < sys.maxsize:
-        for line in lines[1:]:
-            trimmed.append(line[indent:].rstrip())
-    # Strip off trailing and leading blank lines:
-    while trimmed and not trimmed[-1]:
-        trimmed.pop()
-    while trimmed and not trimmed[0]:
-        trimmed.pop(0)
-    # Return a single string:
-    return '\n'.join(trimmed)
 
 
 class CommandLineOutput:
@@ -222,17 +190,10 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
     quitting = False
     output = None
 
-    def __init__(
-            self,
-            params: Dict[str, Any],
-            *args,
-            log=None,
-            filename=None,
-            **kwargs
-    ) -> None:
+    def __init__(self, params: Dict[str, Any], *args, log=None, filename=None, **kwargs) -> None:
         self.params = params
-        #self.plugins = []
         self.bus = params['bus']
+        self.debug = params['debug']
         if 'stdin' in kwargs:
             Cmd.use_rawinput = False
         if not CommandLineBase.output:
@@ -265,15 +226,16 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
         for plugin_entry_point in plugin_entry_points:
             plugin_name = plugin_entry_point.name
             LOGGER.info('Loading Plugin %s ...', plugin_name)
+            if self.debug:
+                LOGGER.info('  %s', plugin_entry_point)
             try:
                 plugin_class = plugin_entry_point.load()
                 plugin = plugin_class(self)
                 self.plugins[plugin_name] = plugin
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 LOGGER.error('Error encountered while loading plugin %s', plugin_name)
                 traceback.print_exc()
         LOGGER.info('All plugins loaded')
-
 
     def add_completion_funcs(self, names, complete_func_name):
         """Helper function which adds a completion function for an array of
@@ -523,111 +485,29 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
         commands = []
         for plugin in self.plugins.values():
             commands.extend(plugin.get_commands())
-        commands.extend([x[3:] for x in Cmd.get_names(self) if x.startswith('do_')])
         return commands
 
-    def get_command(self, command:str) -> Union[Callable, None]:
+    def get_command(self, command: str) -> Union[Callable, None]:
         """Retrieves the function object associated with a command."""
         for plugin in self.plugins.values():
             cmd = plugin.get_command(command)
             if cmd:
                 return cmd
-        try:
-            fn = getattr(self, "do_" + command)
-            return fn
-        except AttributeError:
-            return None
+        return None
 
-    def get_command_help(self, command:str) -> str:
+    def get_command_help(self, command: str) -> str:
         """Retrieves the documentation associated with a command."""
         fn = self.get_command(command)
         if fn:
             return fn.__doc__ or ''
         return ''
 
-    def get_command_args(self, command:str) -> Union[None,Tuple]:
+    def get_command_args(self, command: str) -> Union[None, Tuple]:
         """Retrievers the argparse arguments for a command."""
         for plugin in self.plugins.values():
             args = plugin.get_command_args(command)
             if args:
                 return args
-        try:
-            argparse_args = getattr(self, "argparse_" + command)
-        except AttributeError:
-            return None
-        return argparse_args
-
-    def help_command_list(self) -> None:
-        """Prints the list of commands."""
-        commands = sorted(self.get_commands())
-        self.print_topics('Type "help <command>" to get more information on a command:',
-                                 commands, 0, 80)
-
-    argparse_help = (
-            add_arg(
-                    '-v',
-                    '--verbose',
-                    dest='verbose',
-                    action='store_true',
-                    help='Display more help for each command',
-                    default=False
-            ),
-            add_arg(
-                    'command',
-                    metavar='COMMAND',
-                    nargs='*',
-                    type=str,
-                    help='Command to get help on'
-            ),
-    )
-
-    def do_help(self, arg: str) -> Union[bool, None]:
-        """help [-v] [CMD]...
-
-           List available commands with "help" or detailed help with "help cmd".
-        """
-        # arg isn't really a string but since Cmd provides a do_help
-        # function we have to match the prototype.
-        args = cast(argparse.Namespace, arg)
-        if len(args.command) <= 0 and not args.verbose:
-            self.help_command_list()
-            return None
-        if len(args.command) == 0:
-            help_cmd = ''
-        else:
-            help_cmd = args.command[0]
-        help_cmd = help_cmd.replace("-", "_")
-
-        if not help_cmd:
-            help_cmd = '*'
-
-        cmds = self.get_commands()
-        cmds.sort()
-
-        cmd_found = False
-        for cmd in cmds:
-            if fnmatch(cmd, help_cmd):
-                if cmd_found:
-                    self.print('--------------------------------------------------------------')
-                cmd_found = True
-                parser = self.create_argparser(cmd)
-                if parser:
-                    # Need to figure out how to strip out the `usage:`
-                    # Need to figure out how to get indentation to work
-                    parser.print_help()
-                    continue
-
-                try:
-                    doc = self.get_command_help(cmd)
-                    if doc:
-                        doc = doc.format(command=cmd)
-                        self.stdout.write(f"{trim(str(doc))}\n")
-                        continue
-                except AttributeError:
-                    pass
-                self.stdout.write(f'{str(self.nohelp % (cmd,))}\n')
-        if not cmd_found:
-            self.print(f'No command found matching "{help_cmd}"')
         return None
 
     def print(self, *args, end='\n', file=None) -> None:
@@ -669,22 +549,6 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
             for i, cmd in enumerate(cmds):
                 cmds[i] = cmd.replace("_", "-")
         Cmd.print_topics(self, header, cmds, cmdlen, maxcol)
-
-    def do_exit(self, _) -> bool:
-        """exit
-
-           Exits from the program.
-        """
-        CommandLineBase.quitting = True
-        return True
-
-    def do_quit(self, _) -> bool:
-        """quit
-
-           Exits from the program.
-        """
-        CommandLineBase.quitting = True
-        return True
 
     def add_line_to_history(self, line: str) -> None:
         """Adds a line into the history."""

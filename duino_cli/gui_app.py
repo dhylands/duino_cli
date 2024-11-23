@@ -4,12 +4,11 @@ Implements a GUI based app.
 
 import signal
 
-from typing import cast, Any, Dict
+from typing import Any, Dict
 
 import tkinter as tk
 from tkinter import ttk, HORIZONTAL
 
-from duino_bus.bus import IBus
 from duino_cli.command_line import CommandLine
 from duino_cli.gui_console import GuiConsole
 
@@ -32,7 +31,6 @@ class App:  # pylint: disable=too-few-public-methods
         console_frame.rowconfigure(0, weight=1)
         horizontal_pane.add(console_frame, weight=1)
         console_frame.grid_propagate(False)
-        bus = cast(IBus, params['bus'])
         self.cli = CommandLine(params)
         self.console = GuiConsole(self.cli, console_frame, self.root)
         self.console.focus_set()
