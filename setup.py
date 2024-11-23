@@ -4,13 +4,12 @@ Setup file for the duinp_cli module.
 
 from pathlib import Path
 import sys
+from setuptools import setup
+from duino_cli.version import __version__
+
 if sys.version_info < (3, 9):
     print('duino_cli requires Python 3.9 or newer.')
     sys.exit(1)
-
-# pylint: disable=wrong-import-position
-from setuptools import setup
-from duino_cli.version import __version__
 
 here = Path(__file__).parent
 long_description = (here / "README.md").read_text()
@@ -45,6 +44,7 @@ setup(
         install_requires=['pyserial'],
         entry_points={
                 'console_scripts': ['cli=duino_cli.command_line:main'],
+                'duino_cli.plugin': ['core=duino_cli.core_plugin:CliPlugin']
         },
         extras_require={':sys_platform == "win32"': ['pyreadline']}
 )

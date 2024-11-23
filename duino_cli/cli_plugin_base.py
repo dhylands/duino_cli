@@ -2,11 +2,15 @@
 Base class used for plugins.
 """
 
-from typing import Callable, List, Tuple, Union
+from typing import Any, Callable, Dict, List, Tuple, Union
 
 # TODO: SHould probably get dump_mem from duino_log
 from duino_bus.dump_mem import dump_mem
 from duino_cli.command_line_base import CommandLineBase
+
+def add_arg(*args, **kwargs) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
+    """Returns a list containing args and kwargs."""
+    return (args, kwargs)
 
 class CliPluginBase:
 

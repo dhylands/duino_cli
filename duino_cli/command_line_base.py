@@ -6,13 +6,14 @@ This module implements a command line interface
 import argparse
 from cmd import Cmd
 from fnmatch import fnmatch
-import importlib.util
+import importlib.metadata
 import logging
 import os
 from pathlib import Path
 import shlex
 import stat
 import sys
+import traceback
 from typing import cast, Any, Callable, Dict, IO, List, NoReturn, Tuple, Union
 
 from duino_bus.dump_mem import dump_mem
@@ -230,7 +231,7 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
             **kwargs
     ) -> None:
         self.params = params
-        self.plugins = []
+        #self.plugins = []
         self.bus = params['bus']
         if 'stdin' in kwargs:
             Cmd.use_rawinput = False
@@ -255,32 +256,23 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
         self.history = []
         self.history_filename = params['history_filename']
         self.read_history()
+        self.plugins = {}
         self.load_plugins()
 
     def load_plugins(self) -> None:
-        plugins_dir = cast(str, self.params['plugins_dir'])
-        """Loads plugins from `plugins_dir`."""
-        if not os.path.isdir(plugins_dir):
-            return
-        self.plugins = []
-        for plugin_path in Path(plugins_dir).glob("*.py"):
-            plugin_name = plugin_path.stem
-            if plugin_name.startswith(".") or plugin_name.startswith("__"):
-                continue
-            spec = importlib.util.spec_from_file_location(plugin_name, plugin_path)
-            if spec is None:
-                continue
-            module = importlib.util.module_from_spec(spec)
-            if spec.loader is None:
-                continue
-            print('Loading Plugin', plugin_name)
-            spec.loader.exec_module(module)
-            plugin = module.CliPlugin(self)
-            self.plugins.append(plugin)
-        if len(self.plugins) == 0:
-            print('No plugins found')
-            return
-        print('All plugins loaded')
+        """Loads plugins which have been installed."""
+        plugin_entry_points = importlib.metadata.entry_points()['duino_cli.plugin']
+        for plugin_entry_point in plugin_entry_points:
+            plugin_name = plugin_entry_point.name
+            LOGGER.info('Loading Plugin %s ...', plugin_name)
+            try:
+                plugin_class = plugin_entry_point.load()
+                plugin = plugin_class(self)
+                self.plugins[plugin_name] = plugin
+            except Exception:
+                LOGGER.error('Error encountered while loading plugin %s', plugin_name)
+                traceback.print_exc()
+        LOGGER.info('All plugins loaded')
 
 
     def add_completion_funcs(self, names, complete_func_name):
@@ -529,14 +521,14 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
     def get_commands(self) -> List[str]:
         """Gets a list of all of the commands."""
         commands = []
-        for plugin in self.plugins:
+        for plugin in self.plugins.values():
             commands.extend(plugin.get_commands())
         commands.extend([x[3:] for x in Cmd.get_names(self) if x.startswith('do_')])
         return commands
 
     def get_command(self, command:str) -> Union[Callable, None]:
         """Retrieves the function object associated with a command."""
-        for plugin in self.plugins:
+        for plugin in self.plugins.values():
             cmd = plugin.get_command(command)
             if cmd:
                 return cmd
@@ -555,7 +547,7 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
 
     def get_command_args(self, command:str) -> Union[None,Tuple]:
         """Retrievers the argparse arguments for a command."""
-        for plugin in self.plugins:
+        for plugin in self.plugins.values():
             args = plugin.get_command_args(command)
             if args:
                 return args
