@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./libraries/duino_cli
+        working-directory: ./duino_cli
     steps:
 
     # Checkout the repository
@@ -17,11 +17,12 @@ jobs:
     - name: Checkout duino_cli
       uses: actions/checkout@v4
       with:
-        path: libraries/duino_cli
+        path: duino_cli
 
     - name: Checkout duino_bus
       uses: actions/checkout@v4
       with:
+        repository: dhylands/duino_bus
         path: libraries/duino_bus
 
     - name: Checkout duino_log
@@ -29,6 +30,12 @@ jobs:
       with:
         repository: dhylands/duino_log
         path: libraries/duino_log
+
+    - name: Checkout duino_littlefs
+      uses: actions/checkout@v4
+      with:
+        repository: dhylands/duino_littlefs
+        path: libraries/duino_littlefs
 
     - name: Checkout duino_util
       uses: actions/checkout@v4
@@ -53,6 +60,9 @@ jobs:
 
     - name: Make sure all of the examples compile
       run: make BOARD=pico compile-examples
+
+    - name: Install our Python dependencies
+      run: pip install -e ../libraries/duino_bus
 
     - name: Install python tools
       run: make BOARD=pico install-python-tools

@@ -23,13 +23,14 @@
 #include <poll.h>
 #include <pthread.h>
 #include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/unistd.h>
 #include <termios.h>
+
+#include <cstdio>
 
 #include "Bus.h"
 #include "CorePacketHandler.h"
