@@ -1,3 +1,4 @@
+duino_bus
 coverage
 pytest
 pylint

@@ -18,4 +18,4 @@ sdist:
 
 # Creates the distribution tarball and uploads to the pypi live server
 upload-pypi: sdist
-	twine upload -r pypi-all dist/*
+	twine upload -r pypi-duino-cli dist/*
