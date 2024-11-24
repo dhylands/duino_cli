@@ -41,7 +41,11 @@ setup(
                 'Topic :: Terminals :: Serial',
                 'Topic :: Utilities',
         ],
-        install_requires=['pyserial', 'duino_bus'],
+        install_requires=[
+                'duino_bus',
+                'pyserial',
+                'pyyaml'
+        ],
         entry_points={
                 'console_scripts': ['cli=duino_cli.command_line:main'],
                 'duino_cli.plugin': ['core=duino_cli.core_plugin:CorePlugin']
