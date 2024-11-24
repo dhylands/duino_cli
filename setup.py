@@ -47,7 +47,7 @@ setup(
                 'pyyaml'
         ],
         entry_points={
-                'console_scripts': ['cli=duino_cli.command_line:main'],
+                'console_scripts': ['cli=duino_cli.duino_cli:main'],
                 'duino_cli.plugin': ['core=duino_cli.core_plugin:CorePlugin']
         },
         extras_require={':sys_platform == "win32"': ['pyreadline']}

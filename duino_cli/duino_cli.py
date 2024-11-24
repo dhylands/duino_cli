@@ -12,7 +12,7 @@ try:
 except ModuleNotFoundError:
     termios = None  # pylint: disable=invalid-name
 
-from typing import Any, Dict\
+from typing import Any, Dict
 
 from pathlib import Path
 import serial.tools.list_ports

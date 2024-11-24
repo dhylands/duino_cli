@@ -5,7 +5,6 @@ This module implements a command line interface
 
 import argparse
 from cmd import Cmd
-from fnmatch import fnmatch
 import importlib.metadata
 import logging
 import os

@@ -1,4 +1,4 @@
-name: Build Actions for duino_cli
+name: Build duino_cli
 
 on: [push, pull_request]
 
