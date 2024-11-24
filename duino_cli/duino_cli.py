@@ -14,6 +14,7 @@ except ModuleNotFoundError:
 
 from typing import Any, Dict\
 
+from pathlib import Path
 import serial.tools.list_ports
 from serial import SerialException
 
@@ -25,8 +26,8 @@ from duino_cli import colors
 from duino_cli.log_setup import log_setup
 from duino_cli.txt_app import TextApp
 
-HOME = os.getenv('HOME')
-HISTORY_FILENAME = f'{HOME}/.cli_history'
+HOME = Path.home()
+HISTORY_FILENAME = HOME / '.cli_history'
 
 
 def extra_info(port):

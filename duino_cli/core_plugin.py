@@ -16,15 +16,30 @@ PING = 0x01  # Check to see if the device is alive.
 class CorePlugin(CliPluginBase):
     """Defines core plugin functions used with duino_cli."""
 
-    def help_command_list(self) -> None:
-        """Prints the list of commands."""
-        commands = sorted(self.cli.get_commands())
-        self.cli.print_topics(
-                'Type "help <command>" to get more information on a command:',
-                commands,
-                0,
-                80
-        )
+    def do_args(self, args: List[str]) -> Union[bool, None]:
+        """args [arguments...]
+
+           Debug function for verifying argument parsing. This function just
+           prints out each argument that it receives.
+        """
+        for idx, arg in enumerate(args):
+            self.print(f"arg[{idx}] = '{arg}'")
+
+    def do_echo(self, args: List[str]) -> Union[bool, None]:
+        """echo [STRING]...
+
+           Similar to linux echo.
+        """
+        line = ' '.join(args[1:])
+        self.print(line)
+
+    def do_exit(self, _) -> bool:
+        """exit
+
+           Exits from the program.
+        """
+        CommandLineBase.quitting = True
+        return True
 
     argparse_help = (
             add_arg(
@@ -53,7 +68,7 @@ class CorePlugin(CliPluginBase):
         # function we have to match the prototype.
         args = cast(argparse.Namespace, arg)
         if len(args.command) <= 0 and not args.verbose:
-            self.help_command_list()
+            self.cli.help_command_list()
             return None
         if len(args.command) == 0:
             help_cmd = ''
@@ -93,30 +108,18 @@ class CorePlugin(CliPluginBase):
             self.print(f'No command found matching "{help_cmd}"')
         return None
 
-    def do_args(self, args: List[str]) -> Union[bool, None]:
-        """args [arguments...]
+    def do_history(self, args: List[str]) -> Union[bool, None]:
+        """history [FILTER]
 
-           Debug function for verifying argument parsing. This function just
-           prints out each argument that it receives.
+           Shows the history of commands executed.
         """
-        for idx, arg in enumerate(args):
-            self.print(f"arg[{idx}] = '{arg}'")
-
-    def do_echo(self, args: List[str]) -> Union[bool, None]:
-        """echo [STRING]...
-
-           Similar to linux echo.
-        """
-        line = ' '.join(args[1:])
-        self.print(line)
-
-    def do_exit(self, _) -> bool:
-        """exit
-
-           Exits from the program.
-        """
-        CommandLineBase.quitting = True
-        return True
+        if len(args) > 1:
+            history_filter = args[1]
+        else:
+            history_filter = '*'
+        for line in self.cli.history:
+            if fnmatch(line, history_filter):
+                self.print(line)
 
     def do_ping(self, _) -> None:
         """ping

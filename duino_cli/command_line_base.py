@@ -536,6 +536,16 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
         if DEBUG:
             self.print(*args, end, file)
 
+    def help_command_list(self) -> None:
+        """Prints the list of commands."""
+        commands = sorted(self.get_commands())
+        self.print_topics(
+                'Type "help <command>" to get more information on a command:',
+                commands,
+                0,
+                80
+        )
+
     def print_topics(
             self,
             header: str,
@@ -583,16 +593,3 @@ class CommandLineBase(Cmd):  # pylint: disable=too-many-instance-attributes,too-
             for line in self.history:
                 file.write(line)
                 file.write('\n')
-
-    def do_history(self, args: List[str]) -> Union[bool, None]:
-        """history [FILTER]
-
-           Shows the history of commands executed.
-        """
-        if len(args) > 1:
-            history_filter = args[1]
-        else:
-            history_filter = '*'
-        for line in self.history:
-            if fnmatch(line, history_filter):
-                self.print(line)
