@@ -4,6 +4,7 @@ A CLI program for working with microcontrollers.
 """
 
 import argparse
+import logging
 import os
 import sys
 
@@ -73,7 +74,6 @@ def main_no_gui(params: Dict[str, Any]) -> None:
 
 def real_main() -> None:
     """Real main"""
-    log_setup()
     default_baud = 115200
     default_baud_str = os.getenv('CLI_BAUD')
     try:
@@ -156,11 +156,19 @@ def real_main() -> None:
         list_ports()
         return
 
+    if args.debug:
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+
     if args.nocolor:
         colors.set_nocolor()
+        color = False
+    else:
+        color = True
+    log_setup(level=level, color=color)
 
     params = {}
-    #params['plugins_dir'] = args.plugins_dir
     params['history_filename'] = HISTORY_FILENAME
 
     bus = SocketBus()
