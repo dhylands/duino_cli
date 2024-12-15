@@ -17,6 +17,7 @@ from duino_cli.log_setup import log_setup
 
 COLORS = {
         'WARNING': Color.WARNING_COLOR,
+        'GOOD': Color.GOOD_COLOR,
         'INFO': Color.INFO_COLOR,
         'DEBUG': Color.DEBUG_COLOR,
         'CRITICAL': Color.CRITICAL_COLOR,
@@ -25,7 +26,7 @@ COLORS = {
 
 # Single letter code to print using %(levelchar)s
 
-LEVELCHAR = {'WARNING': 'W', 'INFO': 'I', 'DEBUG': 'D', 'CRITICAL': 'C', 'ERROR': 'E'}
+LEVELCHAR = {'WARNING': 'W', 'GOOD': 'G', 'INFO': 'I', 'DEBUG': 'D', 'CRITICAL': 'C', 'ERROR': 'E'}
 
 
 class ColoredFormatter(logging.Formatter):
@@ -99,6 +100,7 @@ def test_main():
 
     # You can now start issuing logging statements in your code
     log.debug('debug message')  # This won't print to myapp.log
+    log.good('good message')  # type: ignore
     log.info('info message')  # Neither will this.
     log.warning('Checkout this warning.')  # This will show up in the log file.
     log.error('An error goes here.')  # and so will this.

@@ -7,14 +7,19 @@ from fnmatch import fnmatch
 from typing import cast, List, Union
 
 from duino_bus.packet import ErrorCode, Packet
-from duino_cli.command_line_base import CommandLineBase
-from duino_cli.cli_plugin_base import add_arg, trim, CliPluginBase
+from duino_cli.command_line import CommandLine
+from duino_cli.cli_plugin_base import trim, CliPluginBase
+from duino_cli.command_argument_parser import add_arg
 
 PING = 0x01  # Check to see if the device is alive.
 
 
 class CorePlugin(CliPluginBase):
     """Defines core plugin functions used with duino_cli."""
+
+    def __init__(self, cli: CommandLine) -> None:
+        super().__init__(cli)
+        self.bus = cli.params['bus']
 
     def do_args(self, args: List[str]) -> Union[bool, None]:
         """args [arguments...]
@@ -38,7 +43,7 @@ class CorePlugin(CliPluginBase):
 
            Exits from the program.
         """
-        CommandLineBase.quitting = True
+        self.cli.quitting = True
         return True
 
     argparse_help = (
@@ -127,7 +132,7 @@ class CorePlugin(CliPluginBase):
            Sends a PING packet to the arduino and reports a response.
         """
         ping = Packet(PING)
-        err, _rsp = self.cli.bus.send_command_get_response(ping)
+        err, _rsp = self.bus.send_command_get_response(ping)
         if err != ErrorCode.NONE:
             return
         self.print('Device is alive')
@@ -137,5 +142,5 @@ class CorePlugin(CliPluginBase):
 
            Exits from the program.
         """
-        CommandLineBase.quitting = True
+        self.cli.quitting = True
         return True

@@ -3,16 +3,9 @@ Base class used for plugins.
 """
 
 import sys
-from typing import Any, Callable, Dict, List, Tuple, Union
+from typing import Callable, List, Tuple, Union
 
-# TODO(dhylands): SHould probably get dump_mem from duino_log
-from duino_bus.dump_mem import dump_mem
-from duino_cli.command_line_base import CommandLineBase
-
-
-def add_arg(*args, **kwargs) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
-    """Returns a list containing args and kwargs."""
-    return (args, kwargs)
+from duino_cli.command_line import CommandLine
 
 
 def trim(docstring: str) -> str:
@@ -49,7 +42,7 @@ def trim(docstring: str) -> str:
 class CliPluginBase:
     """Base class used for all plugins."""
 
-    def __init__(self, cli: CommandLineBase):
+    def __init__(self, cli: CommandLine):
         self.cli = cli
 
     def get_commands(self) -> List[str]:
@@ -73,19 +66,18 @@ class CliPluginBase:
             return None
         return argparse_args
 
-    def print(self, *args, end='\n', file=None) -> None:
+    def print(self, *args, **kwargs) -> None:
         """Like print, but allows for redirection."""
-        if file is None:
-            file = self.cli.stdout
-        line = ' '.join(str(arg) for arg in args) + end
-        file.write(line)
-        file.flush()
+        self.cli.print(*args, **kwargs)
+
+    def error(self, *args, **kwargs) -> None:
+        """Like print, but allows for redirection."""
+        self.cli.error(*args, **kwargs)
+
+    def debug(self, *args, **kwargs) -> None:
+        """Prints only when DEBUG is set to true"""
+        self.cli.debug(*args, **kwargs)
 
     def dump_mem(self, buf, prefix='', addr=0) -> None:
-        """Like print, but allows for redirection."""
-        dump_mem(buf, prefix, addr, log=self.print)
-
-    def pr_debug(self, *args, end='\n', file=None) -> None:
-        """Prints only when DEBUG is set to true"""
-        if self.cli.params['debug']:
-            self.print(*args, end, file)
+        """Like dump_mem, but allows for redirection."""
+        self.cli.dump_mem(buf, prefix, addr)

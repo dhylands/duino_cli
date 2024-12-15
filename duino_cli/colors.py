@@ -61,6 +61,7 @@ class Color:  # pylint: disable=too-few-public-methods
     NO_COLOR: str = NO_COLOR
 
     WARNING_COLOR: str = LT_YELLOW
+    GOOD_COLOR: str = LT_GREEN
     INFO_COLOR: str = ''
     DEBUG_COLOR: str = LT_BLUE
     CRITICAL_COLOR: str = LT_RED
