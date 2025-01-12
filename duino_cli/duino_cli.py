@@ -171,11 +171,11 @@ def real_main() -> None:
     params = {}
     params['history_filename'] = HISTORY_FILENAME
 
-    bus = SocketBus()
+    bus = None
     if args.net:
         bus = SocketBus()
         bus.connect_to_server('localhost', SocketBus.DEFAULT_PORT)
-    else:
+    elif args.port:
         bus = SerialBus()
         try:
             bus.open(args.port, baudrate=args.baud)
@@ -183,7 +183,7 @@ def real_main() -> None:
             print(err)
             return
 
-    if args.debug:
+    if args.debug and bus:
         bus.set_debug(True)
 
     params['bus'] = bus

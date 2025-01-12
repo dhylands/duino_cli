@@ -28,6 +28,9 @@ class CommandArgumentParser(argparse.ArgumentParser):
         #    self.cli.print(message)
         raise CommandLineError(message)
 
+    #def __str__(self) -> str:
+    #    return f'CommandArgumentParser(prog={self.prog})'
+
 
 def add_arg(*args, **kwargs) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
     """Returns a list containing args and kwargs."""

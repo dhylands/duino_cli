@@ -18,4 +18,3 @@ class TextApp:  # pylint: disable=too-few-public-methods
         """Runs the application."""
         cli = CommandLine(self.params)
         cli.auto_cmdloop('')
-        cli.save_history()

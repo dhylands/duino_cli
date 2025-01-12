@@ -4,10 +4,12 @@ Core plugin functionality.
 import argparse
 from cmd import Cmd
 from fnmatch import fnmatch
-from typing import cast, List, Union
+import shlex
+from typing import Any, Dict, List, Union
 
 from duino_bus.packet import ErrorCode, Packet
 from duino_cli.command_line import CommandLine
+from duino_cli.command_line_output import CommandLineOutput
 from duino_cli.cli_plugin_base import trim, CliPluginBase
 from duino_cli.command_argument_parser import add_arg
 
@@ -17,25 +19,42 @@ PING = 0x01  # Check to see if the device is alive.
 class CorePlugin(CliPluginBase):
     """Defines core plugin functions used with duino_cli."""
 
-    def __init__(self, cli: CommandLine) -> None:
-        super().__init__(cli)
-        self.bus = cli.params['bus']
+    def __init__(self, output: CommandLineOutput, params: Dict[str, Any]) -> None:
+        super().__init__(output, params)
+        self.bus = params['bus']
+        self.cli: CommandLine = params['cli']
 
-    def do_args(self, args: List[str]) -> Union[bool, None]:
+    #argparse_args = (
+    #    add_arg(
+    #        'argv',
+    #        nargs='*',
+    #    ),
+    #)
+
+    def do_args(self, args: argparse.Namespace) -> Union[bool, None]:
         """args [arguments...]
 
            Debug function for verifying argument parsing. This function just
            prints out each argument that it receives.
         """
-        for idx, arg in enumerate(args):
+        for idx, arg in enumerate(args.argv):
             self.print(f"arg[{idx}] = '{arg}'")
 
-    def do_echo(self, args: List[str]) -> Union[bool, None]:
+    def do_args_2(self, args: argparse.Namespace) -> Union[bool, None]:
+        """args-2 [arguments...]
+
+           Debug function for verifying argument parsing. This function just
+           prints out each argument that it receives.
+        """
+        for idx, arg in enumerate(args.argv):
+            self.print(f"arg[{idx}] = '{arg}'")
+
+    def do_echo(self, args: argparse.Namespace) -> Union[bool, None]:
         """echo [STRING]...
 
            Similar to linux echo.
         """
-        line = ' '.join(args[1:])
+        line = ' '.join(args.argv[1:])
         self.print(line)
 
     def do_exit(self, _) -> bool:
@@ -64,14 +83,13 @@ class CorePlugin(CliPluginBase):
             ),
     )
 
-    def do_help(self, arg: str) -> Union[bool, None]:
+    def do_help(self, args: argparse.Namespace) -> Union[bool, None]:
         """help [-v] [CMD]...
 
            List available commands with "help" or detailed help with "help cmd".
         """
         # arg isn't really a string but since Cmd provides a do_help
         # function we have to match the prototype.
-        args = cast(argparse.Namespace, arg)
         if len(args.command) <= 0 and not args.verbose:
             self.cli.help_command_list()
             return None
@@ -104,26 +122,27 @@ class CorePlugin(CliPluginBase):
                     doc = self.cli.get_command_help(cmd)
                     if doc:
                         doc = doc.format(command=cmd)
-                        self.cli.stdout.write(f"{trim(str(doc))}\n")
+                        self.print(f"{trim(str(doc))}")
                         continue
                 except AttributeError:
                     pass
-                self.cli.stdout.write(f'{str(Cmd.nohelp % (cmd,))}\n')
+                self.print(f'{str(Cmd.nohelp % (cmd,))}')
         if not cmd_found:
             self.print(f'No command found matching "{help_cmd}"')
         return None
 
-    def do_history(self, args: List[str]) -> Union[bool, None]:
+    def do_history(self, args: argparse.Namespace) -> Union[bool, None]:
         """history [FILTER]
 
            Shows the history of commands executed.
         """
-        if len(args) > 1:
-            history_filter = args[1]
+        if len(args.argv) > 1:
+            history_filter = args.argv[1]
         else:
             history_filter = '*'
-        for line in self.cli.history:
-            if fnmatch(line, history_filter):
+        for line in self.cli.session.history.get_strings():
+            argv = shlex.split(line)
+            if fnmatch(argv[0], history_filter):
                 self.print(line)
 
     def do_ping(self, _) -> None:
@@ -132,6 +151,12 @@ class CorePlugin(CliPluginBase):
            Sends a PING packet to the arduino and reports a response.
         """
         ping = Packet(PING)
+        if self.bus is None:
+            self.error('No device connected')
+            return
+        if not self.bus.is_open():
+            self.error('No device open')
+            return
         err, _rsp = self.bus.send_command_get_response(ping)
         if err != ErrorCode.NONE:
             return

@@ -3,9 +3,11 @@ Base class used for plugins.
 """
 
 import sys
-from typing import Callable, List, Tuple, Union
+from typing import Any, Callable, Dict, List, Tuple, Union
 
-from duino_cli.command_line import CommandLine
+import argparse
+
+from duino_cli.command_line_output import CommandLineOutput
 
 
 def trim(docstring: str) -> str:
@@ -42,15 +44,15 @@ def trim(docstring: str) -> str:
 class CliPluginBase:
     """Base class used for all plugins."""
 
-    def __init__(self, cli: CommandLine):
-        self.cli = cli
+    def __init__(self, output: CommandLineOutput, params: Dict[str, Any]):
+        self.output = output
 
     def get_commands(self) -> List[str]:
         """Gets a list of all of the commands."""
         cmds = [x[3:] for x in dir(self.__class__) if x.startswith('do_')]
         return cmds
 
-    def get_command(self, command: str) -> Union[Callable, None]:
+    def get_command(self, command: str) -> Union[Callable[[argparse.Namespace], bool], None]:
         """Retrieves the function object associated with a command."""
         try:
             fn = getattr(self, "do_" + command)
@@ -64,20 +66,28 @@ class CliPluginBase:
             argparse_args = getattr(self, "argparse_" + command)
         except AttributeError:
             return None
+        # print(f'get_command_args: {argparse_args}')
         return argparse_args
+
+    def execute_cmd(self, fn: Callable[[argparse.Namespace], Union[bool, None]], args: argparse.Namespace) -> Union[bool, None]:
+        """Executes a command from this plugin.
+
+            Plugins can override this function to do plugin wide checking.
+        """
+        return fn(args)
 
     def print(self, *args, **kwargs) -> None:
         """Like print, but allows for redirection."""
-        self.cli.print(*args, **kwargs)
+        self.output.print(*args, **kwargs)
 
     def error(self, *args, **kwargs) -> None:
         """Like print, but allows for redirection."""
-        self.cli.error(*args, **kwargs)
+        self.output.error(*args, **kwargs)
 
     def debug(self, *args, **kwargs) -> None:
         """Prints only when DEBUG is set to true"""
-        self.cli.debug(*args, **kwargs)
+        self.output.debug(*args, **kwargs)
 
     def dump_mem(self, buf, prefix='', addr=0) -> None:
         """Like dump_mem, but allows for redirection."""
-        self.cli.dump_mem(buf, prefix, addr)
+        self.output.dump_mem(buf, prefix, addr)
