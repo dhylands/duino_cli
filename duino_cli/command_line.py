@@ -141,17 +141,17 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
             try:
                 line = self.session.prompt(self.prompt, completer=completer)
             except EOFError:
-                print('Got EOF')
+                self.debug('Got EOF')
                 self.quitting = True
                 return True
             except KeyboardInterrupt:
                 print('')
-                print('Got Keyboard Interrupt')
+                self.degbug('Got Keyboard Interrupt')
                 self.quitting = True
                 return True
             if self.quitting:
                 return True
-            print(f'Got line {line}')
+            self.debug(f'Got line {line}')
             self.execute_cmd(line)
         return True
 
@@ -191,6 +191,8 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
             if plugin is None or fn is None:
                 raise ValueError(f"Unrecognized command: '{args.cmd}'")
             return plugin.execute_cmd(fn, args)
+        except CommandLineError as err:
+            return self.handle_exception(err)
         except ValueError as err:
             return self.handle_exception(err)
 
@@ -204,10 +206,10 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
             print("Got CommandLineError")
             return 1
         except EOFError:
-            print('Got EOF')
+            # print('Got EOF')
             self.quitting = True
             return 0
-        print(f'Got line ?{line}')
+        # print(f'Got line ?{line}')
         self.execute_cmd(line)
 
     def parseline(  # type: ignore
