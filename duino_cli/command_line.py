@@ -8,7 +8,7 @@ import importlib.metadata
 import logging
 import shlex
 import traceback
-from typing import cast, Any, Callable, Dict, IO, List, Tuple, Union
+from typing import Any, Callable, Dict, List, Tuple, Union
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import ANSI
@@ -29,7 +29,7 @@ LOGGER = logging.getLogger(__name__)
 class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-public-methods
     """Class for managing the command line."""
 
-    def __init__(self, params: Dict[str, Any], *args, log=None, filename=None, **kwargs) -> None:
+    def __init__(self, params: Dict[str, Any], log=None, filename=None) -> None:
         self.params = params
         self.params['cli'] = self
         self.cmd_stack = []
@@ -94,7 +94,7 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
         """
         self.update_prompt()
 
-    def postcmd(self, stop, line):
+    def postcmd(self, stop, _line):
         """We also update the prompt here since the command stack may
         have been modified.
 
@@ -129,7 +129,7 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
 
     def auto_cmdloop_internal(self, line) -> Union[bool, None]:
         """The main code for auto_cmdloop."""
-        parser = self.create_argparser('upload')
+        # parser = self.create_argparser('upload')
         # print('-----')
         # print(parser)
         # parser.print_help()
@@ -146,7 +146,7 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
                 return True
             except KeyboardInterrupt:
                 print('')
-                self.degbug('Got Keyboard Interrupt')
+                self.debug('Got Keyboard Interrupt')
                 self.quitting = True
                 return True
             if self.quitting:
@@ -196,26 +196,8 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
         except ValueError as err:
             return self.handle_exception(err)
 
-    def cmdloop(self, intro=None):
-        """We override this to support auto_cmdloop."""
-        self.cmdloop_executed = True
-        try:
-            print('About to call session.prompt')
-            line = self.session.prompt(self.prompt)
-        except CommandLineError:
-            print("Got CommandLineError")
-            return 1
-        except EOFError:
-            # print('Got EOF')
-            self.quitting = True
-            return 0
-        # print(f'Got line ?{line}')
-        self.execute_cmd(line)
-
     def parseline(  # type: ignore
-            self,
-            line
-    ) -> argparse.Namespace:
+            self, line) -> argparse.Namespace:
         """Record the command that was executed. This also allows us to
         transform dashes back to underscores, and to convert the command line into a
         a list of arguments.
@@ -250,11 +232,9 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
                 redirect_mode = 'a'
                 self.debug(f'Redirecting (append) to {self.redirect_filename}')
             try:
-                self.redirect_handler = logging.FileHandler(
-                        self.redirect_filename,
-                        mode=redirect_mode,
-                        encoding='utf-8'
-                )
+                self.redirect_handler = logging.FileHandler(self.redirect_filename,
+                                                            mode=redirect_mode,
+                                                            encoding='utf-8')
             except FileNotFoundError as err:
                 raise CommandLineError(str(err)) from err
             logging.getLogger().addHandler(self.redirect_handler)
@@ -333,15 +313,7 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
             if args:
                 return args
         # No args, create one
-        return (
-            add_arg(
-                'argv',
-                metavar="ARGV",
-                nargs='*',
-                help='Arguments'
-            ),
-        )
-        return None
+        return (add_arg('argv', metavar="ARGV", nargs='*', help='Arguments'), )
 
     def print(self, *args, **kwargs) -> None:
         """Like print, but allows for redirection."""
@@ -362,20 +334,10 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
     def help_command_list(self) -> None:
         """Prints the list of commands."""
         commands = sorted(self.get_commands())
-        self.print_topics(
-                'Type "help <command>" to get more information on a command:',
-                commands,
-                0,
-                80
-        )
+        self.print_topics('Type "help <command>" to get more information on a command:', commands,
+                          0, 80)
 
-    def print_topics(
-            self,
-            header: str,
-            cmds: List[str],
-            cmdlen: int,
-            maxcol: int
-    ) -> None:
+    def print_topics(self, header: str, cmds: List[str], _cmdlen: int, maxcol: int) -> None:
         """Transform underscores to dashes when we print the command names."""
         if isinstance(cmds, list):
             for i, cmd in enumerate(cmds):

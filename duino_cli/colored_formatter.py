@@ -16,12 +16,12 @@ from duino_cli.log_setup import log_setup
 # replaced with the color indicated for a given warning level.
 
 COLORS = {
-        'WARNING': Color.WARNING_COLOR,
-        'GOOD': Color.GOOD_COLOR,
-        'INFO': Color.INFO_COLOR,
-        'DEBUG': Color.DEBUG_COLOR,
-        'CRITICAL': Color.CRITICAL_COLOR,
-        'ERROR': Color.ERROR_COLOR
+    'WARNING': Color.WARNING_COLOR,
+    'GOOD': Color.GOOD_COLOR,
+    'INFO': Color.INFO_COLOR,
+    'DEBUG': Color.DEBUG_COLOR,
+    'CRITICAL': Color.CRITICAL_COLOR,
+    'ERROR': Color.ERROR_COLOR
 }
 
 # Single letter code to print using %(levelchar)s
@@ -77,19 +77,15 @@ def test_main():
     variables being constants).
 
     """
-    parser = argparse.ArgumentParser(
-            prog="log-test",
-            usage="%(prog)s [options]",
-            description="Testing for the loggind module"
-    )
-    parser.add_argument(
-            "-d",
-            "--debug",
-            dest="debug",
-            action="store_true",
-            help="Enable debug features",
-            default=False
-    )
+    parser = argparse.ArgumentParser(prog="log-test",
+                                     usage="%(prog)s [options]",
+                                     description="Testing for the loggind module")
+    parser.add_argument("-d",
+                        "--debug",
+                        dest="debug",
+                        action="store_true",
+                        help="Enable debug features",
+                        default=False)
     args = parser.parse_args(sys.argv[1:])
 
     log_setup(cfg_path='../logging.cfg')

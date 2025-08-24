@@ -8,35 +8,35 @@ import yaml
 # Provide a default logging config that will be used if the user doesn't
 # provide one.
 DEFAULT_LOGGING_CONFIG = {
-        'version': 1,
-        'disable_existing_loggers': False,
-        'formatters': {
-                'simple': {
-                        'format': '%(message)s',
-                },
-                'simple-color': {
-                        '()': 'duino_cli.colored_formatter.ColoredFormatter',
-                        'format': '%(color)s%(message)s%(nocolor)s',
-                },
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'simple': {
+            'format': '%(message)s',
         },
-        'handlers': {
-                'console-simple': {
-                        'class': 'logging.StreamHandler',
-                        'level': 'DEBUG',
-                        'formatter': 'simple',
-                        'stream': 'ext://sys.stdout',
-                },
-                'console-simple-color': {
-                        'class': 'logging.StreamHandler',
-                        'level': 'DEBUG',
-                        'formatter': 'simple-color',
-                        'stream': 'ext://sys.stdout',
-                },
+        'simple-color': {
+            '()': 'duino_cli.colored_formatter.ColoredFormatter',
+            'format': '%(color)s%(message)s%(nocolor)s',
         },
-        'root': {
-                'level': 'INFO',
-                'handlers': ['console-simple-color'],
-        }
+    },
+    'handlers': {
+        'console-simple': {
+            'class': 'logging.StreamHandler',
+            'level': 'DEBUG',
+            'formatter': 'simple',
+            'stream': 'ext://sys.stdout',
+        },
+        'console-simple-color': {
+            'class': 'logging.StreamHandler',
+            'level': 'DEBUG',
+            'formatter': 'simple-color',
+            'stream': 'ext://sys.stdout',
+        },
+    },
+    'root': {
+        'level': 'INFO',
+        'handlers': ['console-simple-color'],
+    }
 }
 
 

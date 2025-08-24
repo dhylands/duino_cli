@@ -9,6 +9,14 @@ import argparse
 
 from duino_cli.command_line_output import CommandLineOutput
 
+# Map of user strings to booleans
+BOOL_MAP = {
+    'true': True,
+    'fasle': False,
+    'on': True,
+    'off': False,
+}
+
 
 def trim(docstring: str) -> str:
     """Trims the leading spaces from docstring comments.
@@ -41,10 +49,17 @@ def trim(docstring: str) -> str:
     return '\n'.join(trimmed)
 
 
+def str_to_bool(s: str) -> bool:
+    """Determines if a string looks like a boolean value."""
+    if s in BOOL_MAP:
+        return BOOL_MAP[s]
+    raise ValueError(f"Invalid boolean: '{s}'")
+
+
 class CliPluginBase:
     """Base class used for all plugins."""
 
-    def __init__(self, output: CommandLineOutput, params: Dict[str, Any]):
+    def __init__(self, output: CommandLineOutput, _params: Dict[str, Any]):
         self.output = output
 
     def get_commands(self) -> List[str]:
@@ -69,7 +84,8 @@ class CliPluginBase:
         # print(f'get_command_args: {argparse_args}')
         return argparse_args
 
-    def execute_cmd(self, fn: Callable[[argparse.Namespace], Union[bool, None]], args: argparse.Namespace) -> Union[bool, None]:
+    def execute_cmd(self, fn: Callable[[argparse.Namespace], Union[bool, None]],
+                    args: argparse.Namespace) -> Union[bool, None]:
         """Executes a command from this plugin.
 
             Plugins can override this function to do plugin wide checking.

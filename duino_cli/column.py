@@ -18,13 +18,9 @@ def default_print(line: str) -> None:
     print(line)
 
 
-def column_print(
-        fmt: str,
-        rows: List[Union[str,
-                         List[str]]],
-        print_func: Callable[[str],
-                             None] = default_print
-) -> None:
+def column_print(fmt: str,
+                 rows: List[Union[str, List[str]]],
+                 print_func: Callable[[str], None] = default_print) -> None:
     """Prints a formatted list, adjusting the width so everything fits.
     fmt contains a single character for each column. < indicates that the
     column should be left justified, > indicates that the column should

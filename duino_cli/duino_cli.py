@@ -52,10 +52,8 @@ def list_ports():
     for port in serial.tools.list_ports.comports():
         detected = True
         if port.vid:
-            print(
-                    f'USB Serial Device {port.vid:04x}:{port.pid:04x}{extra_info(port)} '
-                    f'found @{port.device}'
-            )
+            print(f'USB Serial Device {port.vid:04x}:{port.pid:04x}{extra_info(port)} '
+                  f'found @{port.device}')
     if not detected:
         print('No serial devices detected')
 
@@ -87,60 +85,47 @@ def real_main() -> None:
     # default_plugins_dir = os.getenv("CLI_PLUGINS_DIR") or 'plugins'
 
     parser = argparse.ArgumentParser(
-            prog='duino_cli',
-            usage='%(prog)s [options] [command]',
-            description='Command Line Interface for Arduino boards.',
-            epilog='You can specify the default serial port using the '
-            'CLI_PORT environment variable.\n',
-            #'You can specify the defaut plugin directory using the '
-            #'CLI_PLUGINS_DIR environment variable.',
-            formatter_class=argparse.RawTextHelpFormatter
-    )
-    parser.add_argument(
-            '-p',
-            '--port',
-            dest='port',
-            help=f'Set the serial port to use (default = {default_port})',
-            default=default_port
-    )
-    parser.add_argument(
-            '-b',
-            '--baud',
-            dest='baud',
-            action='store',
-            type=int,
-            help=f'Set the baudrate used (default = {default_baud})',
-            default=default_baud
-    )
-    parser.add_argument(
-            '-l',
-            '--list',
-            dest='list',
-            action='store_true',
-            help='Display serial ports',
-            default=False
-    )
-    parser.add_argument(
-            '-n',
-            '--net',
-            dest='net',
-            action='store_true',
-            help=f'Connect to a duino_cli_server (localhost:{SocketBus.DEFAULT_PORT})'
-    )
-    parser.add_argument(
-            '-d',
-            '--debbug',
-            dest='debug',
-            action='store_true',
-            help='Turn on some debug'
-    )
-    parser.add_argument(
-            "--nocolor",
-            dest="nocolor",
-            action="store_true",
-            help="Turn off colorized output",
-            default=default_nocolor
-    )
+        prog='duino_cli',
+        usage='%(prog)s [options] [command]',
+        description='Command Line Interface for Arduino boards.',
+        epilog='You can specify the default serial port using the '
+        'CLI_PORT environment variable.\n',
+        #'You can specify the defaut plugin directory using the '
+        #'CLI_PLUGINS_DIR environment variable.',
+        formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument('-p',
+                        '--port',
+                        dest='port',
+                        help=f'Set the serial port to use (default = {default_port})',
+                        default=default_port)
+    parser.add_argument('-b',
+                        '--baud',
+                        dest='baud',
+                        action='store',
+                        type=int,
+                        help=f'Set the baudrate used (default = {default_baud})',
+                        default=default_baud)
+    parser.add_argument('-l',
+                        '--list',
+                        dest='list',
+                        action='store_true',
+                        help='Display serial ports',
+                        default=False)
+    parser.add_argument('-n',
+                        '--net',
+                        dest='net',
+                        action='store_true',
+                        help=f'Connect to a duino_cli_server (localhost:{SocketBus.DEFAULT_PORT})')
+    parser.add_argument('-d',
+                        '--debbug',
+                        dest='debug',
+                        action='store_true',
+                        help='Turn on some debug')
+    parser.add_argument("--nocolor",
+                        dest="nocolor",
+                        action="store_true",
+                        help="Turn off colorized output",
+                        default=default_nocolor)
 
     #gui_parser = parser.add_mutually_exclusive_group(required=False)
     #gui_parser.add_argument('--gui', dest='gui', action='store_true')

@@ -14,39 +14,35 @@ if sys.version_info < (3, 9):
 here = Path(__file__).parent
 long_description = (here / "README.md").read_text()
 
-setup(
-        name='duino_cli',
-        version=__version__,
-        author='Dave Hylands',
-        author_email='dhylands@gmail.com',
-        description=('A CLI interface for working with Arduino projects.'),
-        license='MIT',
-        keywords='cmd cli arduino',
-        url='https://github.com/dhylands/duino_cli',
-        download_url=f'https://github.com/dhylands/duino_cli/shell/tarball/v{__version__}',
-        packages=['duino_cli'],
-        long_description=long_description,
-        long_description_content_type='text/markdown',
-        classifiers=[
-                'Development Status :: 3 - Alpha',
-                'Environment :: Console',
-                'Intended Audience :: Developers',
-                'License :: OSI Approved :: MIT License',
-                'Natural Language :: English',
-                'Operating System :: POSIX :: Linux',
-                'Programming Language :: Python',
-                'Programming Language :: Python :: 3',
-                'Topic :: Software Development :: Embedded Systems',
-                'Topic :: System :: Shells',
-                'Topic :: Terminals :: Serial',
-                'Topic :: Utilities',
-        ],
-        install_requires=['duino_bus',
-                          'pyserial',
-                          'pyyaml'],
-        entry_points={
-                'console_scripts': ['cli=duino_cli.duino_cli:main'],
-                'duino_cli.plugin': ['core=duino_cli.core_plugin:CorePlugin']
-        },
-        extras_require={':sys_platform == "win32"': ['pyreadline']}
-)
+setup(name='duino_cli',
+      version=__version__,
+      author='Dave Hylands',
+      author_email='dhylands@gmail.com',
+      description=('A CLI interface for working with Arduino projects.'),
+      license='MIT',
+      keywords='cmd cli arduino',
+      url='https://github.com/dhylands/duino_cli',
+      download_url=f'https://github.com/dhylands/duino_cli/shell/tarball/v{__version__}',
+      packages=['duino_cli'],
+      long_description=long_description,
+      long_description_content_type='text/markdown',
+      classifiers=[
+          'Development Status :: 3 - Alpha',
+          'Environment :: Console',
+          'Intended Audience :: Developers',
+          'License :: OSI Approved :: MIT License',
+          'Natural Language :: English',
+          'Operating System :: POSIX :: Linux',
+          'Programming Language :: Python',
+          'Programming Language :: Python :: 3',
+          'Topic :: Software Development :: Embedded Systems',
+          'Topic :: System :: Shells',
+          'Topic :: Terminals :: Serial',
+          'Topic :: Utilities',
+      ],
+      install_requires=['duino_bus', 'pyserial', 'pyyaml'],
+      entry_points={
+          'console_scripts': ['cli=duino_cli.duino_cli:main'],
+          'duino_cli.plugin': ['core=duino_cli.core_plugin:CorePlugin']
+      },
+      extras_require={':sys_platform == "win32"': ['pyreadline']})

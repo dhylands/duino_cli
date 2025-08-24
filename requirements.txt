@@ -4,6 +4,7 @@ pytest
 pylint
 pyyaml
 yapf
-pyeditline
 pyserial
 twine
+prompt_toolkit
+argcomplete

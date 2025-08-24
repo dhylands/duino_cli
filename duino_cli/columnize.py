@@ -6,12 +6,9 @@ from typing import Callable, List
 from duino_cli.column import align_cell, default_print
 
 
-def columnize(
-        items: List[str],
-        display_width=80,
-        print_func: Callable[[str],
-                             None] = default_print
-) -> None:
+def columnize(items: List[str],
+              display_width=80,
+              print_func: Callable[[str], None] = default_print) -> None:
     """Prints a columnar list, adjusting the width of each column so everything fits.
     Unlike column_print, which prints a list of rows, this function prints
     several columns of a single entitiy (in a similar fashion to ls).
@@ -64,25 +61,13 @@ if __name__ == "__main__":
     columnize(['one', 'two'])
     print('===== List which should print on 1 line =====')
     columnize([
-            '12345678',
-            '12345678',
-            '12345678',
-            '12345678',
-            '12345678',
-            '12345678',
-            '12345678',
-            '12345678 <'
+        '12345678', '12345678', '12345678', '12345678', '12345678', '12345678', '12345678',
+        '12345678 <'
     ])
     print('===== List which should print on 2 lines =====')
     columnize([
-            '12345678',
-            '12345678',
-            '12345678',
-            '12345678',
-            '12345678',
-            '12345678',
-            '12345678',
-            '12345678  <'
+        '12345678', '12345678', '12345678', '12345678', '12345678', '12345678', '12345678',
+        '12345678  <'
     ])
     print('===== List that should print in one column =====')
     columnize(['12345678', '12345678', '123456789abc<', '12345678'], display_width=8)

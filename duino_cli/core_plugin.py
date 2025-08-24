@@ -5,15 +5,18 @@ import argparse
 from cmd import Cmd
 from fnmatch import fnmatch
 import shlex
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, Union
 
 from duino_bus.packet import ErrorCode, Packet
+from duino_bus.packer import Packer
+from duino_bus.unpacker import Unpacker
 from duino_cli.command_line import CommandLine
 from duino_cli.command_line_output import CommandLineOutput
-from duino_cli.cli_plugin_base import trim, CliPluginBase
+from duino_cli.cli_plugin_base import str_to_bool, trim, CliPluginBase
 from duino_cli.command_argument_parser import add_arg
 
 PING = 0x01  # Check to see if the device is alive.
+DEBUG = 0x02  # Enables/disables debug.
 
 
 class CorePlugin(CliPluginBase):
@@ -23,6 +26,7 @@ class CorePlugin(CliPluginBase):
         super().__init__(output, params)
         self.bus = params['bus']
         self.cli: CommandLine = params['cli']
+        self.bus_debug: int = 0
 
     #argparse_args = (
     #    add_arg(
@@ -49,6 +53,34 @@ class CorePlugin(CliPluginBase):
         for idx, arg in enumerate(args.argv):
             self.print(f"arg[{idx}] = '{arg}'")
 
+    def do_debug(self, args: argparse.Namespace) -> Union[bool, None]:
+        """debug [on|off]
+
+           Turns bus debugging on or off.
+        """
+        if len(args.argv) > 1:
+            try:
+                self.bus_debug = int(str_to_bool(args.argv[1]))
+            except ValueError as err:
+                self.error(str(err))
+
+            if self.bus is None:
+                self.error('No device connected')
+                return
+            if not self.bus.is_open():
+                self.error('No device open')
+                return
+            debug_pkt = Packet(DEBUG)
+            packer = Packer(debug_pkt)
+            packer.pack_u32(self.bus_debug)
+            err, rsp = self.bus.send_command_get_response(debug_pkt)
+            if err != ErrorCode.NONE:
+                return
+            unpacker = Unpacker(rsp.get_data())
+            self.bus_debug = unpacker.unpack_u32()
+        debug_str = 'on' if self.bus_debug else 'off'
+        self.print(f'Bus debug is {debug_str}')
+
     def do_echo(self, args: argparse.Namespace) -> Union[bool, None]:
         """echo [STRING]...
 
@@ -66,21 +98,13 @@ class CorePlugin(CliPluginBase):
         return True
 
     argparse_help = (
-            add_arg(
-                    '-v',
-                    '--verbose',
-                    dest='verbose',
-                    action='store_true',
-                    help='Display more help for each command',
-                    default=False
-            ),
-            add_arg(
-                    'command',
-                    metavar='COMMAND',
-                    nargs='*',
-                    type=str,
-                    help='Command to get help on'
-            ),
+        add_arg('-v',
+                '--verbose',
+                dest='verbose',
+                action='store_true',
+                help='Display more help for each command',
+                default=False),
+        add_arg('command', metavar='COMMAND', nargs='*', type=str, help='Command to get help on'),
     )
 
     def do_help(self, args: argparse.Namespace) -> Union[bool, None]:
