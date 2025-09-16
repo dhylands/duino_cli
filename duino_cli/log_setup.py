@@ -11,36 +11,34 @@ DEFAULT_LOGGING_CONFIG = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
-        'simple': {
+        'time-nocolor': {
+            'format': '%(asctime)s - %(message)s',
+        },
+        'time-color': {
+            '()': 'duino_cli.colored_formatter.ColoredFormatter',
+            'format': '%(asctime)s - %(message)s',
+        },
+        'notime-nocolor': {
             'format': '%(message)s',
         },
-        'simple-color': {
+        'notime-color': {
             '()': 'duino_cli.colored_formatter.ColoredFormatter',
-            'format': '%(color)s%(message)s%(nocolor)s',
+            'format': '%(message)s',
         },
     },
-    'handlers': {
-        'console-simple': {
-            'class': 'logging.StreamHandler',
-            'level': 'DEBUG',
-            'formatter': 'simple',
-            'stream': 'ext://sys.stdout',
-        },
-        'console-simple-color': {
-            'class': 'logging.StreamHandler',
-            'level': 'DEBUG',
-            'formatter': 'simple-color',
-            'stream': 'ext://sys.stdout',
-        },
-    },
+    # We construct 'handlers' at runtime
     'root': {
         'level': 'INFO',
-        'handlers': ['console-simple-color'],
+        'handlers': ['notime-color'],
     }
 }
 
 
-def log_setup(cfg_path='logging.cfg', level=logging.INFO, cfg_env='LOG_CFG', color=True):
+def log_setup(cfg_path='logging.cfg',
+              level=logging.INFO,
+              cfg_env='LOG_CFG',
+              color=True,
+              timestamp=False):
     """Sets up the logging based on the logging.cfg file. You can
     override the path using the LOG_CFG environment variable.
 
@@ -48,17 +46,33 @@ def log_setup(cfg_path='logging.cfg', level=logging.INFO, cfg_env='LOG_CFG', col
     value = os.getenv(cfg_env, None)
     if value:
         cfg_path = value
+    # print(f'cfg_path = {cfg_path}')
     if os.path.exists(cfg_path):
+        print(f'using logging configuration from: {cfg_path}')
         with open(cfg_path, 'r', encoding='utf-8') as cfg_file:
             config = yaml.safe_load(cfg_file.read())
         logging.config.dictConfig(config)
     else:
-        if color:
-            handler = 'console-simple-color'
+        print('using runtime logging configuration')
+        if timestamp:
+            time_fmt = 'time'
         else:
-            handler = 'console-simple'
+            time_fmt = 'notime'
+        if color:
+            color_fmt = 'color'
+        else:
+            color_fmt = 'nocolor'
+        formatter_name = f'{time_fmt}-{color_fmt}'
+        handler_name = formatter_name
+        DEFAULT_LOGGING_CONFIG['handlers'] = {
+            handler_name: {
+                'class': 'duino_cli.logging_handler.PromptTkLoggingHandler',
+                'level': logging.getLevelName(level),
+                'formatter': formatter_name,
+            }
+        }
         DEFAULT_LOGGING_CONFIG['root']['level'] = logging.getLevelName(level)
-        DEFAULT_LOGGING_CONFIG['root']['handlers'] = [handler]
+        DEFAULT_LOGGING_CONFIG['root']['handlers'] = [handler_name]
         logging.config.dictConfig(DEFAULT_LOGGING_CONFIG)
     logging.getLogger().setLevel(level)
     add_logging_level('GOOD', logging.INFO + 1)

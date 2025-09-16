@@ -13,16 +13,17 @@ try:
 except ModuleNotFoundError:
     termios = None  # pylint: disable=invalid-name
 
-from typing import Any, Dict
+from typing import Any, Optional, Type
 
 from pathlib import Path
 import serial.tools.list_ports
 from serial import SerialException
 
+from duino_bus.bus import IBus
 from duino_bus.serial_bus import SerialBus
 from duino_bus.socket_bus import SocketBus
 
-from duino_cli import colors
+from duino_cli.colors import set_nocolor
 # from duino_cli.gui_app import GuiApp
 from duino_cli.log_setup import log_setup
 from duino_cli.txt_app import TextApp
@@ -58,16 +59,30 @@ def list_ports():
         print('No serial devices detected')
 
 
-#def main_gui(params: Dict[str, Any]) -> None:
-#    """Main program when run as a GUI."""
-#    gui_app = GuiApp(params)
-#    gui_app.run()
+class BusContext:
+    """A context manager which takes care of closing the bus."""
 
+    def __init__(self, args: argparse.Namespace) -> None:
+        self.args = args
+        self.bus = None
 
-def main_no_gui(params: Dict[str, Any]) -> None:
-    """Main program when no as a text console."""
-    txt_app = TextApp(params)
-    txt_app.run()
+    def __enter__(self) -> Optional[IBus]:
+        if self.args.net:
+            self.bus = SocketBus()
+            self.bus.connect_to_server('localhost', SocketBus.DEFAULT_PORT)
+        elif self.args.port:
+            self.bus = SerialBus()
+            try:
+                self.bus.open(self.args.port, baudrate=self.args.baud)
+            except SerialException as err:
+                print(err)
+        return self.bus
+
+    def __exit__(self, _exc_type: Optional[Type[BaseException]],
+                 _exc_value: Optional[BaseException], _traceback: Optional[Any]) -> bool:
+        if self.bus is not None:
+            self.bus.close()
+        return False  # Propagate exceptions
 
 
 def real_main() -> None:
@@ -143,41 +158,30 @@ def real_main() -> None:
 
     if args.debug:
         level = logging.DEBUG
+        timestamp = True
     else:
         level = logging.INFO
+        timestamp = False
 
     if args.nocolor:
-        colors.set_nocolor()
+        set_nocolor()
         color = False
     else:
         color = True
-    log_setup(level=level, color=color)
+    log_setup(level=level, color=color, timestamp=timestamp, cfg_path='logging.cfg')
 
     params = {}
     params['history_filename'] = HISTORY_FILENAME
 
-    bus = None
-    if args.net:
-        bus = SocketBus()
-        bus.connect_to_server('localhost', SocketBus.DEFAULT_PORT)
-    elif args.port:
-        bus = SerialBus()
-        try:
-            bus.open(args.port, baudrate=args.baud)
-        except SerialException as err:
-            print(err)
-            return
+    with BusContext(args) as bus:
+        if args.debug and bus:
+            bus.set_debug(True)
 
-    if args.debug and bus:
-        bus.set_debug(True)
+        params['bus'] = bus
+        params['debug'] = args.debug
 
-    params['bus'] = bus
-    params['debug'] = args.debug
-
-    #if args.gui:
-    #    main_gui(params)
-    #else:
-    main_no_gui(params)
+        txt_app = TextApp(params)
+        txt_app.run()
 
 
 def main():
@@ -198,3 +202,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    print('bak from main')

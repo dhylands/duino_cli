@@ -4,7 +4,10 @@ Core plugin functionality.
 import argparse
 from cmd import Cmd
 from fnmatch import fnmatch
+import logging
 import shlex
+import threading
+import time
 from typing import Any, Dict, Union
 
 from duino_bus.packet import ErrorCode, Packet
@@ -13,10 +16,12 @@ from duino_bus.unpacker import Unpacker
 from duino_cli.command_line import CommandLine
 from duino_cli.command_line_output import CommandLineOutput
 from duino_cli.cli_plugin_base import str_to_bool, trim, CliPluginBase
-from duino_cli.command_argument_parser import add_arg
+from duino_cli.command_argument_parser import Arg, Parser
 
 PING = 0x01  # Check to see if the device is alive.
 DEBUG = 0x02  # Enables/disables debug.
+# LOG = 0x03    # Log message (delcared in bus.py)
+# EVENT = 0x04  # Event packet (declared in bus.py)
 
 
 class CorePlugin(CliPluginBase):
@@ -28,8 +33,8 @@ class CorePlugin(CliPluginBase):
         self.cli: CommandLine = params['cli']
         self.bus_debug: int = 0
 
-    #argparse_args = (
-    #    add_arg(
+    #argparse_args = Parser(
+    #    Arg(
     #        'argv',
     #        nargs='*',
     #    ),
@@ -53,31 +58,19 @@ class CorePlugin(CliPluginBase):
         for idx, arg in enumerate(args.argv):
             self.print(f"arg[{idx}] = '{arg}'")
 
+    argparse_debug = Parser(Arg('on_off', choices=['on', 'off'], nargs='?'), )
+
     def do_debug(self, args: argparse.Namespace) -> Union[bool, None]:
         """debug [on|off]
 
            Turns bus debugging on or off.
         """
-        if len(args.argv) > 1:
-            try:
-                self.bus_debug = int(str_to_bool(args.argv[1]))
-            except ValueError as err:
-                self.error(str(err))
-
-            if self.bus is None:
-                self.error('No device connected')
-                return
-            if not self.bus.is_open():
-                self.error('No device open')
-                return
-            debug_pkt = Packet(DEBUG)
-            packer = Packer(debug_pkt)
-            packer.pack_u32(self.bus_debug)
-            err, rsp = self.bus.send_command_get_response(debug_pkt)
+        if args.on_off is not None:
+            on_off = args.on_off
+            err = self.set_debug(str_to_bool(on_off))
             if err != ErrorCode.NONE:
+                self.error(f'Error: {ErrorCode.as_str(err)}')
                 return
-            unpacker = Unpacker(rsp.get_data())
-            self.bus_debug = unpacker.unpack_u32()
         debug_str = 'on' if self.bus_debug else 'off'
         self.print(f'Bus debug is {debug_str}')
 
@@ -97,14 +90,14 @@ class CorePlugin(CliPluginBase):
         self.cli.quitting = True
         return True
 
-    argparse_help = (
-        add_arg('-v',
-                '--verbose',
-                dest='verbose',
-                action='store_true',
-                help='Display more help for each command',
-                default=False),
-        add_arg('command', metavar='COMMAND', nargs='*', type=str, help='Command to get help on'),
+    argparse_help = Parser(
+        Arg('-v',
+            '--verbose',
+            dest='verbose',
+            action='store_true',
+            help='Display more help for each command',
+            default=False),
+        Arg('command', metavar='COMMAND', nargs='*', type=str, help='Command to get help on'),
     )
 
     def do_help(self, args: argparse.Namespace) -> Union[bool, None]:
@@ -112,6 +105,7 @@ class CorePlugin(CliPluginBase):
 
            List available commands with "help" or detailed help with "help cmd".
         """
+        print('do_help')
         # arg isn't really a string but since Cmd provides a do_help
         # function we have to match the prototype.
         if len(args.command) <= 0 and not args.verbose:
@@ -169,22 +163,38 @@ class CorePlugin(CliPluginBase):
             if fnmatch(argv[0], history_filter):
                 self.print(line)
 
+    def do_log_test(self, _) -> None:
+        """log-test
+
+           Logs some messages in the background to verify that prompt
+           behaves properly.
+        """
+        self.print('Starting log-test')
+        # Start a background thread that prints
+        thread = threading.Thread(target=self.log_test_thread, daemon=True)
+        thread.start()
+
+    def log_test_thread(self):
+        """Thread for testing background logging."""
+        log = logging.getLogger()
+        for i in range(5):
+            log.debug('Debug    Message %d', i)
+            log.warning('Warning  Message %d', i)
+            log.error('Error    Message %d', i)
+            log.info('Info     Message %d', i)
+            log.critical('Critical Message %d', i)
+            time.sleep(1)
+
     def do_ping(self, _) -> None:
         """ping
 
            Sends a PING packet to the arduino and reports a response.
         """
-        ping = Packet(PING)
-        if self.bus is None:
-            self.error('No device connected')
-            return
-        if not self.bus.is_open():
-            self.error('No device open')
-            return
-        err, _rsp = self.bus.send_command_get_response(ping)
-        if err != ErrorCode.NONE:
-            return
-        self.print('Device is alive')
+        err = self.ping()
+        if err == ErrorCode.NONE:
+            self.print("Device is alive")
+        else:
+            self.error(f'Error: {ErrorCode.as_str(err)}')
 
     def do_quit(self, _) -> bool:
         """quit
@@ -193,3 +203,25 @@ class CorePlugin(CliPluginBase):
         """
         self.cli.quitting = True
         return True
+
+    def ping(self) -> int:
+        """Send a PING packet to the connected device and reports if a response was received."""
+        if self.bus is None:
+            return ErrorCode.NO_DEVICE
+        ping = Packet(PING)
+        err, _rsp = self.bus.send_command_get_response(ping)
+        return err
+
+    def set_debug(self, on_off: bool) -> int:
+        """Sends a DEBUG command to the connected device."""
+        if self.bus is None:
+            return ErrorCode.NO_DEVICE
+        debug_pkt = Packet(DEBUG)
+        packer = Packer(debug_pkt)
+        packer.pack_u32(on_off)
+        err, rsp = self.bus.send_command_get_response(debug_pkt)
+        if err != ErrorCode.NONE:
+            return err
+        unpacker = Unpacker(rsp.get_data())
+        self.bus_debug = unpacker.unpack_u32()
+        return ErrorCode.NONE

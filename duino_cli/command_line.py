@@ -17,7 +17,7 @@ from prompt_toolkit.history import FileHistory
 from duino_cli.cli_plugin_base import CliPluginBase
 from duino_cli.colors import Color
 from duino_cli.columnize import columnize
-from duino_cli.command_argument_parser import add_arg, CommandArgumentParser
+from duino_cli.command_argument_parser import Arg, CommandArgumentParser, Parser
 from duino_cli.command_line_error import CommandLineError
 from duino_cli.command_line_output import CommandLineOutput
 from duino_cli.completer import CliCompleter
@@ -157,6 +157,7 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
 
     def handle_exception(self, err, log=None) -> bool:
         """Common code for handling an exception."""
+        print('handle exception')
         if not log:
             log = self.output.error
         base = self.cmd_stack[0]
@@ -167,6 +168,7 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
         log("Error: %s", err)
         return False
 
+    # pylint: disable=too-many-return-statements
     def execute_cmd(self, line) -> bool:
         """Executes a single command."""
         # print(f'execute_cmd line = {line}')
@@ -185,13 +187,21 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
             # Empty line
             return False
         try:
+            # print(f'About to call parseline({line})')
             args = self.parseline(line)
             # print(f'parseline returned {args}')
             plugin, fn = self.get_command(args.cmd)
             if plugin is None or fn is None:
                 raise ValueError(f"Unrecognized command: '{args.cmd}'")
-            return plugin.execute_cmd(fn, args)
+            res = plugin.execute_cmd(fn, args)
+            if res is None:
+                return False
+            return res
+        except argparse.ArgumentError as err:
+            print('argparse.ArgumentParser')
+            return self.handle_exception(err)
         except CommandLineError as err:
+            print('CommandLineError')
             return self.handle_exception(err)
         except ValueError as err:
             return self.handle_exception(err)
@@ -243,8 +253,11 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
             del argv[redirect_index + 1]
             del argv[redirect_index]
 
+        # print(f'Creating argparser for "{cmd}"')
         parser = self.create_argparser(cmd)
+        # print(f'parser.parse_args')
         args = parser.parse_args(argv[1:])
+        # print(f'argparser args = {args}')
         args.cmd = cmd
         args.argv = argv
         return args
@@ -252,6 +265,9 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
     def create_argparser(self, cmd: str) -> CommandArgumentParser:
         """Sets up and parses the command line if an argparse_xxx object exists."""
         argparse_args = self.get_command_args(cmd)
+        if not isinstance(argparse_args, Parser):
+            raise CommandLineError(
+                f'Expecting argparse_{cmd} to be of type Parser. Found {type(argparse_args)}')
         doc_lines = self.get_command_help(cmd).expandtabs().splitlines()
         if '' in doc_lines:
             blank_idx = doc_lines.index('')
@@ -268,16 +284,7 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
             description='\n'.join(description),
             add_help=False,
             exit_on_error=False)
-        # print(f'create_argparser: argparse_args: {argparse_args}')
-        for args, kwargs in argparse_args:
-            if 'completer' in kwargs:
-                completer = kwargs['completer']
-                del kwargs['completer']
-                # print(f'Adding completer {completer}')
-                parser.add_argument(*args, **kwargs).completer = completer  # type: ignore
-            else:
-                parser.add_argument(*args, **kwargs)
-        # print(f'create_argparser: cmd: {cmd} parser: {repr(parser)}')
+        parser = argparse_args.populate_parser(cli=self, parser=parser)
         return parser
 
     def get_commands(self) -> List[str]:
@@ -306,14 +313,14 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
             return ''
         return fn.__doc__ or ''
 
-    def get_command_args(self, cmd: str) -> Tuple:
+    def get_command_args(self, cmd: str) -> Parser:
         """Retrievers the argparse arguments for a command."""
         for plugin in self.plugins.values():
             args = plugin.get_command_args(cmd)
             if args:
                 return args
         # No args, create one
-        return (add_arg('argv', metavar="ARGV", nargs='*', help='Arguments'), )
+        return Parser(Arg('argv', metavar="ARGV", nargs='*', help='Arguments'), )
 
     def print(self, *args, **kwargs) -> None:
         """Like print, but allows for redirection."""

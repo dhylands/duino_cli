@@ -3,10 +3,11 @@ Base class used for plugins.
 """
 
 import sys
-from typing import Any, Callable, Dict, List, Tuple, Union
+from typing import Any, Callable, Dict, List, Union
 
 import argparse
 
+from duino_cli.command_argument_parser import Parser
 from duino_cli.command_line_output import CommandLineOutput
 
 # Map of user strings to booleans
@@ -75,7 +76,7 @@ class CliPluginBase:
         except AttributeError:
             return None
 
-    def get_command_args(self, command: str) -> Union[None, Tuple]:
+    def get_command_args(self, command: str) -> Union[Parser, None]:
         """Retrievers the argparse arguments for a command."""
         try:
             argparse_args = getattr(self, "argparse_" + command)

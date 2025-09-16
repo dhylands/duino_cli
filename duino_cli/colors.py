@@ -60,12 +60,11 @@ class Color:  # pylint: disable=too-few-public-methods
 
     NO_COLOR: str = NO_COLOR
 
-    WARNING_COLOR: str = LT_YELLOW
-    GOOD_COLOR: str = LT_GREEN
-    INFO_COLOR: str = ''
     DEBUG_COLOR: str = LT_BLUE
-    CRITICAL_COLOR: str = LT_RED
+    INFO_COLOR: str = ''
+    WARNING_COLOR: str = LT_YELLOW
     ERROR_COLOR: str = LT_RED
+    CRITICAL_COLOR: str = LT_RED
 
 
 def set_nocolor() -> None:

@@ -17,16 +17,11 @@ from duino_cli.log_setup import log_setup
 
 COLORS = {
     'WARNING': Color.WARNING_COLOR,
-    'GOOD': Color.GOOD_COLOR,
-    'INFO': Color.INFO_COLOR,
+    'INFO': "",
     'DEBUG': Color.DEBUG_COLOR,
     'CRITICAL': Color.CRITICAL_COLOR,
-    'ERROR': Color.ERROR_COLOR
+    'ERROR': Color.ERROR_COLOR,
 }
-
-# Single letter code to print using %(levelchar)s
-
-LEVELCHAR = {'WARNING': 'W', 'GOOD': 'G', 'INFO': 'I', 'DEBUG': 'D', 'CRITICAL': 'C', 'ERROR': 'E'}
 
 
 class ColoredFormatter(logging.Formatter):
@@ -35,29 +30,14 @@ class ColoredFormatter(logging.Formatter):
 
     """
 
-    def __init__(self, *args, use_color=True, **kwargs):
+    def __init__(self, *args, **kwargs):
         #if "strm" in kwargs:
         #    kwargs['stream'] = kwargs.pop("strm")
         logging.Formatter.__init__(self, *args, **kwargs)
-        self.use_color = use_color
 
     def format(self, record):
-        """Add support for %(color)s and %(nocolor)s where the color is
-        determined by the logging level.
-
-        """
-        levelname = record.levelname
-        record.levelchar = LEVELCHAR[levelname]
-        if self.use_color:
-            record.color = COLORS[levelname]
-            if len(record.color) == 0:  # type: ignore
-                record.nocolor = ""
-            else:
-                record.nocolor = Color.NO_COLOR
-        else:
-            record.color = ""
-            record.nocolor = ""
-
+        """Add colors around the message."""
+        record.msg = f'{COLORS[record.levelname]}{record.msg}{Color.NO_COLOR}'
         return logging.Formatter.format(self, record)
 
     def formatTime(self, record, datefmt=None):
@@ -69,7 +49,7 @@ class ColoredFormatter(logging.Formatter):
         rectime = self.converter(record.created)
         if datefmt:
             return time.strftime(datefmt, rectime)
-        return f'{time.strftime("%H:%M:%S", rectime)}{record.msecs}'
+        return f'{time.strftime("%H:%M:%S", rectime)}.{record.msecs}'
 
 
 def test_main():
@@ -88,7 +68,7 @@ def test_main():
                         default=False)
     args = parser.parse_args(sys.argv[1:])
 
-    log_setup(cfg_path='../logging.cfg')
+    log_setup(cfg_path='logging.cfg')
     log = logging.getLogger()
 
     if args.debug:
@@ -96,7 +76,6 @@ def test_main():
 
     # You can now start issuing logging statements in your code
     log.debug('debug message')  # This won't print to myapp.log
-    log.good('good message')  # type: ignore
     log.info('info message')  # Neither will this.
     log.warning('Checkout this warning.')  # This will show up in the log file.
     log.error('An error goes here.')  # and so will this.
