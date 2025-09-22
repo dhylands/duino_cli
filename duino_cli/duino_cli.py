@@ -13,7 +13,7 @@ try:
 except ModuleNotFoundError:
     termios = None  # pylint: disable=invalid-name
 
-from typing import Any, Optional, Type
+from typing import Any, Dict, Optional, Type
 
 from pathlib import Path
 import serial.tools.list_ports
@@ -24,9 +24,9 @@ from duino_bus.serial_bus import SerialBus
 from duino_bus.socket_bus import SocketBus
 
 from duino_cli.colors import set_nocolor
-# from duino_cli.gui_app import GuiApp
+from duino_cli.command_line import CommandLine
 from duino_cli.log_setup import log_setup
-from duino_cli.txt_app import TextApp
+from duino_cli.plugins import PluginManager
 
 HOME = Path.home()
 HISTORY_FILENAME = HOME / '.cli_history'
@@ -38,6 +38,8 @@ def extra_info(port):
     extra_items = []
     if port.manufacturer:
         extra_items.append(f"vendor '{port.manufacturer}'")
+    if port.product:
+        extra_items.append(f"product '{port.product}'")
     if port.serial_number:
         extra_items.append(f"serial '{port.serial_number}'")
     if port.interface:
@@ -62,20 +64,25 @@ def list_ports():
 class BusContext:
     """A context manager which takes care of closing the bus."""
 
-    def __init__(self, args: argparse.Namespace) -> None:
+    def __init__(self, args: argparse.Namespace, plugin_manager: PluginManager) -> None:
         self.args = args
+        self.plugin_manager = plugin_manager
         self.bus = None
 
     def __enter__(self) -> Optional[IBus]:
         if self.args.net:
             self.bus = SocketBus()
+            print(f'Connecting to localhost:{SocketBus.DEFAULT_PORT}')
             self.bus.connect_to_server('localhost', SocketBus.DEFAULT_PORT)
         elif self.args.port:
             self.bus = SerialBus()
             try:
+                print(f'Connecting to {self.args.port} @ {self.args.baud}')
                 self.bus.open(self.args.port, baudrate=self.args.baud)
             except SerialException as err:
                 print(err)
+        else:
+            self.bus = self.plugin_manager.get_serial_bus()
         return self.bus
 
     def __exit__(self, _exc_type: Optional[Type[BaseException]],
@@ -141,11 +148,7 @@ def real_main() -> None:
                         action="store_true",
                         help="Turn off colorized output",
                         default=default_nocolor)
-
-    #gui_parser = parser.add_mutually_exclusive_group(required=False)
-    #gui_parser.add_argument('--gui', dest='gui', action='store_true')
-    #gui_parser.add_argument('--no-gui', dest='gui', action='store_false')
-    #parser.set_defaults(gui=False)
+    parser.add_argument("cmd", nargs=argparse.REMAINDER, help="Optional command to execute")
 
     try:
         args = parser.parse_args(sys.argv[1:])
@@ -170,18 +173,21 @@ def real_main() -> None:
         color = True
     log_setup(level=level, color=color, timestamp=timestamp, cfg_path='logging.cfg')
 
-    params = {}
+    params: Dict[str, Any] = {}
     params['history_filename'] = HISTORY_FILENAME
+    params['debug'] = args.debug
 
-    with BusContext(args) as bus:
+    cli = CommandLine(params)
+
+    cmd_line = ' '.join(args.cmd)
+    with BusContext(args, cli.plugin_manager) as bus:
         if args.debug and bus:
             bus.set_debug(True)
 
-        params['bus'] = bus
-        params['debug'] = args.debug
-
-        txt_app = TextApp(params)
-        txt_app.run()
+        if bus:
+            params['bus'] = bus
+            cli.plugin_manager.set_plugin_bus(bus)
+        cli.auto_cmdloop(cmd_line)
 
 
 def main():
@@ -202,4 +208,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-    print('bak from main')

@@ -4,23 +4,19 @@ This module implements a command line interface
 """
 
 import argparse
-import importlib.metadata
 import logging
 import shlex
-import traceback
-from typing import Any, Callable, Dict, List, Tuple, Union
+from typing import Any, Dict, Union
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import ANSI
 from prompt_toolkit.history import FileHistory
 
-from duino_cli.cli_plugin_base import CliPluginBase
 from duino_cli.colors import Color
-from duino_cli.columnize import columnize
-from duino_cli.command_argument_parser import Arg, CommandArgumentParser, Parser
 from duino_cli.command_line_error import CommandLineError
 from duino_cli.command_line_output import CommandLineOutput
 from duino_cli.completer import CliCompleter
+from duino_cli.plugins import PluginManager
 
 MAX_HISTORY_LINES: int = 40
 LOGGER = logging.getLogger(__name__)
@@ -46,27 +42,10 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
         self.cmdloop_executed = False
         self.redirect_filename = ''
         self.redirect_handler = None
-        self.plugins = {}
         self.prompt = ''
         self.update_prompt()
-        self.load_plugins()
-
-    def load_plugins(self) -> None:
-        """Loads plugins which have been installed."""
-        plugin_entry_points = importlib.metadata.entry_points()['duino_cli.plugin']
-        for plugin_entry_point in plugin_entry_points:
-            plugin_name = plugin_entry_point.name
-            LOGGER.info('Loading Plugin %s ...', plugin_name)
-            if self.params['debug']:
-                LOGGER.info('  %s', plugin_entry_point)
-            try:
-                plugin_class = plugin_entry_point.load()
-                plugin = plugin_class(self.output, self.params)
-                self.plugins[plugin_name] = plugin
-            except Exception:  # pylint: disable=broad-exception-caught
-                LOGGER.error('Error encountered while loading plugin %s', plugin_name)
-                traceback.print_exc()
-        LOGGER.info('All plugins loaded')
+        self.plugin_manager = PluginManager(params, self.output)
+        self.plugin_manager.load_plugins()
 
     def add_completion_funcs(self, names, complete_func_name):
         """Helper function which adds a completion function for an array of
@@ -122,6 +101,9 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
 
         """
         # print('auto_cmdloop')
+        if line:
+            self.execute_cmd(line)
+            return True
         self.cmd_stack.append(self)
         stop = self.auto_cmdloop_internal(line)
         self.cmd_stack.pop()
@@ -135,9 +117,10 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
         # parser.print_help()
         # print('-----')
         while not self.quitting:
-            cmds = self.get_commands()
+            cmds = self.plugin_manager.get_commands()
             cmds.sort()
-            completer = CliCompleter(self.get_pretty_commands(), self.create_argparser)
+            completer = CliCompleter(self.plugin_manager.get_pretty_commands(),
+                                     self.plugin_manager.create_argparser)
             try:
                 line = self.session.prompt(self.prompt, completer=completer)
             except EOFError:
@@ -190,7 +173,7 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
             # print(f'About to call parseline({line})')
             args = self.parseline(line)
             # print(f'parseline returned {args}')
-            plugin, fn = self.get_command(args.cmd)
+            plugin, fn = self.plugin_manager.get_command(args.cmd)
             if plugin is None or fn is None:
                 raise ValueError(f"Unrecognized command: '{args.cmd}'")
             res = plugin.execute_cmd(fn, args)
@@ -254,73 +237,13 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
             del argv[redirect_index]
 
         # print(f'Creating argparser for "{cmd}"')
-        parser = self.create_argparser(cmd)
+        parser = self.plugin_manager.create_argparser(cmd)
         # print(f'parser.parse_args')
         args = parser.parse_args(argv[1:])
         # print(f'argparser args = {args}')
         args.cmd = cmd
         args.argv = argv
         return args
-
-    def create_argparser(self, cmd: str) -> CommandArgumentParser:
-        """Sets up and parses the command line if an argparse_xxx object exists."""
-        argparse_args = self.get_command_args(cmd)
-        if not isinstance(argparse_args, Parser):
-            raise CommandLineError(
-                f'Expecting argparse_{cmd} to be of type Parser. Found {type(argparse_args)}')
-        doc_lines = self.get_command_help(cmd).expandtabs().splitlines()
-        if '' in doc_lines:
-            blank_idx = doc_lines.index('')
-            usage = doc_lines[:blank_idx]
-            description = doc_lines[blank_idx + 1:]
-        else:
-            usage = doc_lines
-            description = []
-        # pylint: disable=unexpected-keyword-arg
-        parser = CommandArgumentParser( \
-            self,
-            prog=cmd,
-            usage='\n'.join(usage),
-            description='\n'.join(description),
-            add_help=False,
-            exit_on_error=False)
-        parser = argparse_args.populate_parser(cli=self, parser=parser)
-        return parser
-
-    def get_commands(self) -> List[str]:
-        """Gets a list of all of the commands."""
-        commands = []
-        for plugin in self.plugins.values():
-            commands.extend(plugin.get_commands())
-        return commands
-
-    def get_pretty_commands(self) -> List[str]:
-        """Gets a list of all the commands, as the user sees them."""
-        return [command.replace('_', '-') for command in self.get_commands()]
-
-    def get_command(self, command: str) -> Union[Tuple[CliPluginBase, Callable], Tuple[None, None]]:
-        """Retrieves the function object associated with a command."""
-        for plugin in self.plugins.values():
-            cmd = plugin.get_command(command)
-            if cmd:
-                return plugin, cmd
-        return None, None
-
-    def get_command_help(self, command: str) -> str:
-        """Retrieves the documentation associated with a command."""
-        plugin, fn = self.get_command(command)
-        if plugin is None or fn is None:
-            return ''
-        return fn.__doc__ or ''
-
-    def get_command_args(self, cmd: str) -> Parser:
-        """Retrievers the argparse arguments for a command."""
-        for plugin in self.plugins.values():
-            args = plugin.get_command_args(cmd)
-            if args:
-                return args
-        # No args, create one
-        return Parser(Arg('argv', metavar="ARGV", nargs='*', help='Arguments'), )
 
     def print(self, *args, **kwargs) -> None:
         """Like print, but allows for redirection."""
@@ -337,18 +260,3 @@ class CommandLine:  # pylint: disable=too-many-instance-attributes,too-many-publ
     def debug(self, *args, **kwargs) -> None:
         """Prints only when DEBUG is set to true"""
         self.output.debug(*args, **kwargs)
-
-    def help_command_list(self) -> None:
-        """Prints the list of commands."""
-        commands = sorted(self.get_commands())
-        self.print_topics('Type "help <command>" to get more information on a command:', commands,
-                          0, 80)
-
-    def print_topics(self, header: str, cmds: List[str], _cmdlen: int, maxcol: int) -> None:
-        """Transform underscores to dashes when we print the command names."""
-        if isinstance(cmds, list):
-            for i, cmd in enumerate(cmds):
-                cmds[i] = cmd.replace("_", "-")
-        self.print(header)
-        self.print('-' * maxcol)
-        columnize(cmds, maxcol - 1, self.print)

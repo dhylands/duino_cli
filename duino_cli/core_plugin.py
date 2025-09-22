@@ -8,7 +8,7 @@ import logging
 import shlex
 import threading
 import time
-from typing import Any, Dict, Union
+from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
 from duino_bus.packet import ErrorCode, Packet
 from duino_bus.packer import Packer
@@ -17,20 +17,41 @@ from duino_cli.command_line import CommandLine
 from duino_cli.command_line_output import CommandLineOutput
 from duino_cli.cli_plugin_base import str_to_bool, trim, CliPluginBase
 from duino_cli.command_argument_parser import Arg, Parser
+from duino_cli.plugins import PluginManager
 
 PING = 0x01  # Check to see if the device is alive.
 DEBUG = 0x02  # Enables/disables debug.
-# LOG = 0x03    # Log message (delcared in bus.py)
-# EVENT = 0x04  # Event packet (declared in bus.py)
+# LOG = 0x03    # Log message (declared in bus.py)
+STACK_INFO = 0x04  # Information about stack usage.
+HEAP_INFO = 0x05  # Information about heap usage.
+# EVENT = 0x??  # Event packet (declared in bus.py)
+
+
+class HeapInfo(NamedTuple):
+    """Heap Information from the HW-Tester."""
+    size: int  # Total size of the heap (in bytes)
+    allocated: int  # Amount of allocated space (in bytes)
+    free: int  # Amount of free space (in bytes)
+    largest_free: int  # Largest Free block (in bytes)
+    growth_potential: int  # Amount heap can grow by (in bytesP)
+
+
+class StackInfo(NamedTuple):
+    """Stack Information from the HW-Tester."""
+    size: int  # Size of the stack (in bytes)
+    used: int  # Amount of used stack space (in bytes)
+    unused: int  # Amount of unused stack space (in bytes)
 
 
 class CorePlugin(CliPluginBase):
     """Defines core plugin functions used with duino_cli."""
 
-    def __init__(self, output: CommandLineOutput, params: Dict[str, Any]) -> None:
-        super().__init__(output, params)
-        self.bus = params['bus']
-        self.cli: CommandLine = params['cli']
+    def __init__(self, plugin_manager: PluginManager, output: CommandLineOutput,
+                 params: Dict[str, Any]) -> None:
+        super().__init__(plugin_manager, output, params)
+        self.cli: Optional[CommandLine] = None
+        if 'cli' in params:
+            self.cli = params['cli']
         self.bus_debug: int = 0
 
     #argparse_args = Parser(
@@ -87,7 +108,8 @@ class CorePlugin(CliPluginBase):
 
            Exits from the program.
         """
-        self.cli.quitting = True
+        if self.cli:
+            self.cli.quitting = True
         return True
 
     argparse_help = Parser(
@@ -109,7 +131,7 @@ class CorePlugin(CliPluginBase):
         # arg isn't really a string but since Cmd provides a do_help
         # function we have to match the prototype.
         if len(args.command) <= 0 and not args.verbose:
-            self.cli.help_command_list()
+            self.plugin_manager.help_command_list()
             return None
         if len(args.command) == 0:
             help_cmd = ''
@@ -120,7 +142,7 @@ class CorePlugin(CliPluginBase):
         if not help_cmd:
             help_cmd = '*'
 
-        cmds = self.cli.get_commands()
+        cmds = self.plugin_manager.get_commands()
         cmds.sort()
 
         cmd_found = False
@@ -129,7 +151,7 @@ class CorePlugin(CliPluginBase):
                 if cmd_found:
                     self.print('--------------------------------------------------------------')
                 cmd_found = True
-                parser = self.cli.create_argparser(cmd)
+                parser = self.plugin_manager.create_argparser(cmd)
                 if parser:
                     # Need to figure out how to strip out the `usage:`
                     # Need to figure out how to get indentation to work
@@ -137,7 +159,7 @@ class CorePlugin(CliPluginBase):
                     continue
 
                 try:
-                    doc = self.cli.get_command_help(cmd)
+                    doc = self.plugin_manager.get_command_help(cmd)
                     if doc:
                         doc = doc.format(command=cmd)
                         self.print(f"{trim(str(doc))}")
@@ -181,7 +203,9 @@ class CorePlugin(CliPluginBase):
             log.debug('Debug    Message %d', i)
             log.warning('Warning  Message %d', i)
             log.error('Error    Message %d', i)
-            log.info('Info     Message %d', i)
+            log.info(
+                'Info     Message %d  123456789 123456789 123456789 123456789 123456789 123456789',
+                i)
             log.critical('Critical Message %d', i)
             time.sleep(1)
 
@@ -196,6 +220,39 @@ class CorePlugin(CliPluginBase):
         else:
             self.error(f'Error: {ErrorCode.as_str(err)}')
 
+    def do_heap_info(self, _) -> None:
+        """heap-info
+
+            Reports heap usage information.
+        """
+        err, info = self.get_heap_info()
+        if err != ErrorCode.NONE or info is None:
+            self.error(f'Error: {ErrorCode.as_str(err)}')
+            return
+        allocated_pct = info.allocated / info.size * 100
+        free_pct = info.free / info.size * 100
+        largest_free_pct = info.largest_free / info.size * 100
+        self.print(f'        Heap Size: {info.size:6}')
+        self.print(f'   Heap Allocated: {info.allocated:6} {int(allocated_pct):2}%')
+        self.print(f'        Heap Free: {info.free:6} {int(free_pct):2}%')
+        self.print(f'Heap Largest Free: {info.largest_free:6} {int(largest_free_pct):2}%')
+        self.print(f' Growth Potential: {info.growth_potential:6}')
+
+    def do_stack_info(self, _) -> None:
+        """stack-info
+
+            Reports stack usage information.
+        """
+        err, info = self.get_stack_info()
+        if err != ErrorCode.NONE or info is None:
+            self.error(f'Error: {ErrorCode.as_str(err)}')
+            return
+        used_pct = info.used / info.size * 100
+        unused_pct = info.unused / info.size * 100
+        self.print(f' Stack Size: {info.size:6}')
+        self.print(f' Stack Used: {info.used:6} {int(used_pct):2}%')
+        self.print(f'Stack Avail: {info.unused:6} {int(unused_pct):2}%')
+
     def do_quit(self, _) -> bool:
         """quit
 
@@ -203,6 +260,36 @@ class CorePlugin(CliPluginBase):
         """
         self.cli.quitting = True
         return True
+
+    def get_heap_info(self) -> Tuple[int, Optional[HeapInfo]]:
+        """Retrieves heap usage information from the HW-Tester."""
+        if self.bus is None:
+            return ErrorCode.NO_DEVICE, None
+        info_pkt = Packet(HEAP_INFO)
+        err, rsp = self.bus.send_command_get_response(info_pkt)
+        if err != ErrorCode.NONE:
+            return err, None
+        unpacker = Unpacker(rsp.get_data())
+        size = unpacker.unpack_u32()
+        alloc = unpacker.unpack_u32()
+        free = unpacker.unpack_u32()
+        largest_free = unpacker.unpack_u32()
+        growth_potential = unpacker.unpack_u32()
+        return ErrorCode.NONE, HeapInfo(size, alloc, free, largest_free, growth_potential)
+
+    def get_stack_info(self) -> Tuple[int, Optional[StackInfo]]:
+        """Retrieves stack usage information from the HW-Tester."""
+        if self.bus is None:
+            return ErrorCode.NO_DEVICE, None
+        info_pkt = Packet(STACK_INFO)
+        err, rsp = self.bus.send_command_get_response(info_pkt)
+        if err != ErrorCode.NONE:
+            return err, None
+        unpacker = Unpacker(rsp.get_data())
+        size = unpacker.unpack_u32()
+        used = unpacker.unpack_u32()
+        unused = unpacker.unpack_u32()
+        return ErrorCode.NONE, StackInfo(size, used, unused)
 
     def ping(self) -> int:
         """Send a PING packet to the connected device and reports if a response was received."""

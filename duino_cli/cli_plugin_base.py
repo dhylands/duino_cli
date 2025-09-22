@@ -3,12 +3,17 @@ Base class used for plugins.
 """
 
 import sys
-from typing import Any, Callable, Dict, List, Union
+from typing import Any, Callable, Dict, List, Optional, Union, TYPE_CHECKING
 
 import argparse
 
+from duino_bus.bus import IBus
 from duino_cli.command_argument_parser import Parser
 from duino_cli.command_line_output import CommandLineOutput
+
+if TYPE_CHECKING:
+    from duino_cli.command_line import CommandLine
+    from duino_cli.plugins import PluginManager
 
 # Map of user strings to booleans
 BOOL_MAP = {
@@ -60,8 +65,20 @@ def str_to_bool(s: str) -> bool:
 class CliPluginBase:
     """Base class used for all plugins."""
 
-    def __init__(self, output: CommandLineOutput, _params: Dict[str, Any]):
+    def __init__(self, plugin_manager: 'PluginManager', output: CommandLineOutput,
+                 _params: Dict[str, Any]):
+        self.plugin_manager = plugin_manager
         self.output = output
+        self.bus = None
+        self.cli = None
+
+    def set_bus(self, bus: IBus) -> None:
+        """Sets the bus that the plugin will use for communicating with the device."""
+        self.bus = bus
+
+    def set_cli(self, cli: 'CommandLine') -> None:
+        """Sets the CLI that the plugin will use for some operations."""
+        self.cli = cli
 
     def get_commands(self) -> List[str]:
         """Gets a list of all of the commands."""
@@ -92,6 +109,12 @@ class CliPluginBase:
             Plugins can override this function to do plugin wide checking.
         """
         return fn(args)
+
+    def get_product_name(self) -> Optional[str]:
+        """Returns a portion of the product name corresponding that this plugin
+           wants to talk to.
+        """
+        return None
 
     def print(self, *args, **kwargs) -> None:
         """Like print, but allows for redirection."""

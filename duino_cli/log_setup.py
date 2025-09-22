@@ -48,12 +48,12 @@ def log_setup(cfg_path='logging.cfg',
         cfg_path = value
     # print(f'cfg_path = {cfg_path}')
     if os.path.exists(cfg_path):
-        print(f'using logging configuration from: {cfg_path}')
+        # print(f'using logging configuration from: {cfg_path}')
         with open(cfg_path, 'r', encoding='utf-8') as cfg_file:
             config = yaml.safe_load(cfg_file.read())
         logging.config.dictConfig(config)
     else:
-        print('using runtime logging configuration')
+        # print('using runtime logging configuration')
         if timestamp:
             time_fmt = 'time'
         else:
@@ -95,7 +95,7 @@ def add_logging_level(level_name, level_num, method_name=None):
 
     Example
     -------
-    >>> ad_lLogging_level('TRACE', logging.DEBUG - 5)
+    >>> add_lLogging_level('TRACE', logging.DEBUG - 5)
     >>> logging.getLogger(__name__).setLevel("TRACE")
     >>> logging.getLogger(__name__).trace('that worked')
     >>> logging.trace('so did this')
